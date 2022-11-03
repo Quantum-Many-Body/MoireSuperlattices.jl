@@ -1,0 +1,7 @@
+name = "MoireSuperlattices"
+uuid = "e394c99e-e854-4268-9140-34fa518dd490"
+authors = ["waltergu <waltergu1989@gmail.com> and contributors"]
+version = "0.1.0"
+
+[compat]
+julia = "1.8"
