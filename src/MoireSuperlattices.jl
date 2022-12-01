@@ -192,7 +192,7 @@ end
 Twisted transition metal dichalcogenide homobilayers.
 """
 mutable struct BLTMD{T<:Number, L<:MoireReciprocalLattice, D<:Function, H<:OperatorGenerator} <: MoireSystem{H}
-    parameters::NamedTuple{(:a₀, :m, :θ), Tuple{T, T, T}}
+    parameters::NamedTuple{(:a₀, :m, :θ, :Vᶻ, :μ), NTuple{5, T}}
     const reciprocallattice::L
     const diagonal!::D
     const H::H
@@ -200,14 +200,22 @@ end
 @inline Base.count(bltmd::BLTMD) = (bltmd.H.hilbert)[1].nlayer * (bltmd.H.hilbert)[1].nsublattice
 
 """
-    BLTMD(a₀::Number, m::Number, θ::Number, V::Number, ψ::Number, w::Number; truncation::Int=4)
+    BLTMD(a₀::Number, m::Number, θ::Number, Vᶻ::Number, μ::Number, V::Number, ψ::Number, w::Number; truncation::Int=4)
 
 [Continuum model of twisted transition metal dichalcogenide homobilayers](@ref https://journals.aps.org/prl/pdf/10.1103/PhysRevLett.122.086402).
 
-Here, the units of the parameters are as follows: `a₀`(Å), `m`(mₑ), `θ`(°), `V`(meV), `ψ`(°), `w`(meV).
+Here, the parameters are as follows:
+* `a₀`: monolayer lattice constant (Å)
+* `m`: effective mass of the conduction band (mₑ)
+* `θ`: twist angle (°)
+* `Vᶻ`: perpendicular displacement field (meV)
+* `μ`: chemical potential (meV)
+* `V`: amplitude of Moire potential (meV)
+* `ψ`: phase of Moire potential (°)
+* `w`: interlayer hopping amplitude (meV)
 """
-function BLTMD(a₀::Number, m::Number, θ::Number, V::Number, ψ::Number, w::Number; truncation::Int=4)
-    T = promote_type(typeof(a₀), typeof(m), typeof(θ), typeof(V), typeof(ψ), typeof(w))
+function BLTMD(a₀::Number, m::Number, θ::Number, Vᶻ::Number, μ::Number, V::Number, ψ::Number, w::Number; truncation::Int=4)
+    T = promote_type(typeof(a₀), typeof(m), typeof(θ), typeof(Vᶻ), typeof(μ), typeof(V), typeof(ψ), typeof(w))
     reciprocallattice = MoireReciprocalLattice(truncation, T)
     terms = (
         Term{:TMD}(:potentialᵣ, V*cosd(ψ), 1, Coupling{2}(:, MoireSpinor, :, :, :, :, :), false),
@@ -218,13 +226,13 @@ function BLTMD(a₀::Number, m::Number, θ::Number, V::Number, ψ::Number, w::Nu
     )
     hilbert = Hilbert(site=>MoireSpace(1, 2, 1, 1) for site=1:length(reciprocallattice))
     table = Table(hilbert, OperatorUnitToTuple(:site, :layer))
-    return BLTMD((a₀=T(a₀), m=T(m), θ=T(θ)), reciprocallattice, bltmd!, OperatorGenerator(terms, bonds(reciprocallattice, 1), hilbert; half=false, table=table))
+    return BLTMD((a₀=T(a₀), m=T(m), θ=T(θ), Vᶻ=T(Vᶻ), μ=T(μ)), reciprocallattice, bltmd!, OperatorGenerator(terms, bonds(reciprocallattice, 1), hilbert; half=false, table=table))
 end
-@inline function bltmd!(dest, a₀, m, θ, k, K₊, K₋; offset)
+@inline function bltmd!(dest, a₀, m, θ, Vᶻ, μ, k, K₊, K₋; offset)
     m₀ = 0.0001312169949060677
     m = m₀*m*a₀^2/(2sind(θ/2))^2
-    dest[offset+1, offset+1] = -mapreduce(x->x^2, +, k-K₊)/2m
-    dest[offset+2, offset+2] = -mapreduce(x->x^2, +, k-K₋)/2m
+    dest[offset+1, offset+1] = - mapreduce(x->x^2, +, k-K₊)/2m + Vᶻ - μ
+    dest[offset+2, offset+2] = - mapreduce(x->x^2, +, k-K₋)/2m - Vᶻ - μ
     return dest
 end
 @inline function bltmdmap(parameters)
@@ -232,6 +240,8 @@ end
         a₀=parameters[:a₀],
         m=parameters[:m],
         θ=parameters[:θ],
+        Vᶻ=parameters[:Vᶻ],
+        μ=parameters[:μ],
         potentialᵣ=parameters[:V]*cosd(parameters[:ψ]),
         potentialᵢ=Complex(parameters[:V]*sind(parameters[:ψ])),
         interlayer₁=parameters[:w],
