@@ -168,7 +168,7 @@ abstract type MoireSystem{H<:OperatorGenerator} <: AbstractTBA{Fermionic{:TBA}, 
 @inline getcontent(moire::MoireSystem, ::Val{:commutator}) = nothing
 @inline function update!(moire::MoireSystem; parameters...)
     moire.parameters = update(moire.parameters; parameters...)
-    update!(getcontent(moire, :H); moire.parameters...)
+    update!(getcontent(moire, :H); parameters...)
 end
 @inline function matrix(moire::MoireSystem; k, kwargs...)
     nblock = count(moire)
