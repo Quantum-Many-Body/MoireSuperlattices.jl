@@ -1,17 +1,18 @@
 module MoireSuperlattices
 
-using LinearAlgebra: norm
+using LinearAlgebra: dot, eigvals, norm
 using Printf: @printf
 using QuantumLattices: atol, hexagon120°map, hexagon60°map
-using QuantumLattices: AbstractLattice, Bond, CompositeIID, CompositeIndex, Coupling, Hilbert, ID, IIDSpace, Index, Lattice, LaTeX, Neighbors, OperatorGenerator, OperatorUnitToTuple, SimpleIID, SimpleInternal, Table, Term
-using QuantumLattices: azimuth, azimuthd, bonds, decimaltostr, dimension, distance, dtype, latexformat, reciprocals, rank, rcoordinate, rotate, update
+using QuantumLattices: AbstractLattice, Algorithm, Bond, BrillouinZone, CompositeIID, CompositeIndex, Coupling, FID, Hilbert, Hopping, ID, IIDSpace, Index
+using QuantumLattices: Lattice, LaTeX, MatrixCoupling, Neighbors, OperatorGenerator, OperatorUnitToTuple, Point, SimpleIID, SimpleInternal, Table, Term
+using QuantumLattices: azimuth, azimuthd, bonds, concatenate, decimaltostr, dimension, distance, dtype, latexformat, reciprocals, rank, rcoordinate, rotate, update, @σ_str
 using RecipesBase: RecipesBase, @recipe, @series
-using StaticArrays: SVector
+using StaticArrays: MVector, SVector
 using TightBindingApproximation: AbstractTBA, Fermionic
 
 import QuantumLattices: diagonalizablefields, getcontent, iidtype, isdefinite, latexname, matrix, script, shape, update!
 
-export BLTMD, CommensurateBilayerHoneycomb, MoireReciprocalLattice, MoireSpace, MoireSpinor, MoireSystem, bltmd!, bltmdmap
+export BLTMD, CommensurateBilayerHoneycomb, MoireReciprocalLattice, MoireSpace, MoireSpinor, MoireSystem, bltmd!, bltmdmap, trihoppings
 
 """
     CommensurateBilayerHoneycomb
@@ -247,6 +248,49 @@ end
         interlayer₁=parameters[:w],
         interlayer₂=parameters[:w],
         interlayer₃=parameters[:w]
+    )
+end
+
+"""
+    trihoppings(bltmd::Union{BLTMD, Algorithm{<:BLTMD}}, brillouin::BrillouinZone, truncation::Int; modulate::Bool=true)
+
+Construct the three-fold symmetric hoppings of the highest energy level of a twisted TMD homobilayer up to the `truncation`th nearest neighbor on the triangular lattice.
+"""
+@inline trihoppings(bltmd::BLTMD, brillouin::BrillouinZone, truncation::Int; modulate::Bool=true) = trihoppings(bltmd, brillouin, Val(truncation); modulate=modulate)
+function trihoppings(bltmd::BLTMD, brillouin::BrillouinZone, ::Val{truncation}; modulate::Bool=true) where truncation
+    @assert isa(truncation, Int) "trihoppings error: truncation must be an integer."
+    datatype = dtype(brillouin)
+    neighbors = Bond{Int, Point{2, datatype}}[]
+    coordinates = SVector{2, datatype}[]
+    candidates = Set(1:truncation)
+    for bond in bonds(Lattice(zeros(datatype, 2); vectors=reciprocals(bltmd.reciprocallattice.translations)), truncation)
+        if bond.kind∈candidates
+            pop!(candidates, bond.kind)
+            push!(neighbors, bond)
+            push!(coordinates, rcoordinate(bond))
+        end
+    end
+    reverse!(neighbors)
+    reverse!(coordinates)
+    values = zero(MVector{truncation, ComplexF64})
+    for momentum in brillouin
+        eigenvalue = eigvals(matrix(bltmd; k=momentum))[end]
+        for i = 1:truncation
+            values[i] += exp(-1im*dot(momentum, coordinates[i]))*eigenvalue
+        end
+    end
+    return concatenate(map((value::Number, neighbor::Bond)->trihoppings(value/length(brillouin), neighbor; modulate=modulate), NTuple{truncation, eltype(values)}(values), NTuple{truncation, eltype(neighbors)}(neighbors))...)
+end
+@inline trihoppings(bltmd::Algorithm{<:BLTMD}, brillouin::BrillouinZone, truncation; modulate::Bool=true) = trihoppings(bltmd.frontend, brillouin, truncation; modulate=modulate)
+function trihoppings(value::Number, neighbor::Bond; modulate::Bool=true)
+    @assert length(neighbor)==2 "trihoppings error: `neighbor` should be a rank-2 bond."
+    @assert isa(neighbor.kind, Int) "trihoppings error: bond kind of `neighbor` should be an integer."
+    θ₀ = azimuth(rcoordinate(neighbor))
+    amplitude = bond::Bond->-1im*exp(3im*azimuth(rcoordinate(bond))-θ₀)
+    suffix = join('₀'+d for d in digits(neighbor.kind))
+    return (
+        Hopping(Symbol("t", suffix), Complex(real(value)), neighbor.kind; modulate=modulate),
+        Hopping(Symbol("λ", suffix), Complex(imag(value)), neighbor.kind, MatrixCoupling(:, FID, :, σ"z", :); amplitude=amplitude, modulate=modulate)
     )
 end
 
