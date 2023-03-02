@@ -4,15 +4,15 @@ using LinearAlgebra: dot, eigvals, norm
 using Printf: @printf
 using QuantumLattices: atol, hexagon120°map, hexagon60°map
 using QuantumLattices: AbstractLattice, Algorithm, Bond, BrillouinZone, CompositeIID, CompositeIndex, Coupling, FID, Hilbert, Hopping, ID, IIDSpace, Index
-using QuantumLattices: Lattice, LaTeX, MatrixCoupling, Neighbors, OperatorGenerator, OperatorUnitToTuple, Point, SimpleIID, SimpleInternal, Table, Term
+using QuantumLattices: Lattice, LaTeX, MatrixCoupling, Neighbors, Onsite, OperatorGenerator, OperatorUnitToTuple, Point, SimpleIID, SimpleInternal, Table, Term
 using QuantumLattices: azimuth, azimuthd, bonds, concatenate, decimaltostr, dimension, distance, dtype, latexformat, reciprocals, rank, rcoordinate, rotate, update, @σ_str
 using RecipesBase: RecipesBase, @recipe, @series
-using StaticArrays: MVector, SVector
+using StaticArrays: SVector
 using TightBindingApproximation: AbstractTBA, Fermionic
 
 import QuantumLattices: diagonalizablefields, getcontent, iidtype, isdefinite, latexname, matrix, script, shape, update!
 
-export BLTMD, CommensurateBilayerHoneycomb, MoireReciprocalLattice, MoireSpace, MoireSpinor, MoireSystem, bltmd!, bltmdmap, trihoppings
+export BLTMD, CommensurateBilayerHoneycomb, MoireReciprocalLattice, MoireSpace, MoireSpinor, MoireSystem, bltmd!, bltmdmap, chemicalpotential, tribonds, trihoppings, trivalues
 
 """
     CommensurateBilayerHoneycomb
@@ -252,47 +252,100 @@ end
 end
 
 """
-    trihoppings(bltmd::Union{BLTMD, Algorithm{<:BLTMD}}, brillouin::BrillouinZone, truncation::Int; modulate::Bool=true)
+    tribonds(bltmd::BLTMD, truncation::Int, datatype=Float64) -> Vector{Vector{Bond}}
+
+Get the tri-symmetric bonds on the triangular lattice.
+"""
+function tribonds(bltmd::BLTMD, truncation::Int, datatype=Float64)
+    neighbors = [Bond{Int, Point{2, datatype}}[] for i=1:truncation]
+    for bond in bonds(Lattice(zeros(datatype, 2); vectors=reciprocals(bltmd.reciprocallattice.translations)), truncation)
+        if bond.kind>0
+            coordinate = rcoordinate(bond)
+            if length(neighbors[bond.kind])==0
+                push!(neighbors[bond.kind], bond)
+            else
+                for i = 1:length(neighbors[bond.kind])
+                    another = rcoordinate(neighbors[bond.kind][i])
+                    θ = acosd(dot(coordinate, another)/norm(coordinate)/norm(another))/60
+                    isapprox(round(Int, θ), θ; atol=atol) && break
+                    if i==length(neighbors[bond.kind])
+                        push!(neighbors[bond.kind], bond)
+                    end
+                end
+            end
+        end
+    end
+    return neighbors
+end
+
+"""
+    trivalues(bltmd::BLTMD, neighbors::Vector{<:Vector{<:Bond}}, brillouin::BrillouinZone) -> Vector{Vector{ComplexF64}}
+
+Get the tri-symmetric hopping amplitudes on the triangular lattice.
+"""
+function trivalues(bltmd::BLTMD, neighbors::Vector{<:Vector{<:Bond}}, brillouin::BrillouinZone)
+    coordinates = [[rcoordinate(bond) for bond in bonds] for bonds in neighbors]
+    values = [[zero(ComplexF64) for bond in bonds] for bonds in neighbors]
+    for momentum in brillouin
+        eigenvalue = eigvals(matrix(bltmd; k=momentum))[end]
+        for i = 1:length(neighbors)
+            for j = 1:length(neighbors[i])
+                values[i][j] += exp(-1im*dot(momentum, coordinates[i][j]))*eigenvalue/length(brillouin)
+            end
+        end
+    end
+    return values
+end
+
+"""
+    trihoppings(bltmd::Union{BLTMD, Algorithm{<:BLTMD}}, brillouin::BrillouinZone, truncation::Int; modulate::Bool=true) -> Tuple{Vararg{Term}}
 
 Construct the three-fold symmetric hoppings of the highest energy level of a twisted TMD homobilayer up to the `truncation`th nearest neighbor on the triangular lattice.
 """
-@inline trihoppings(bltmd::BLTMD, brillouin::BrillouinZone, truncation::Int; modulate::Bool=true) = trihoppings(bltmd, brillouin, Val(truncation); modulate=modulate)
-function trihoppings(bltmd::BLTMD, brillouin::BrillouinZone, ::Val{truncation}; modulate::Bool=true) where truncation
+@inline trihoppings(bltmd::BLTMD, brillouin::BrillouinZone, truncation::Int; modulate::Bool=true, atol=atol) = trihoppings(bltmd, brillouin, Val(truncation); modulate=modulate, atol=atol)
+function trihoppings(bltmd::BLTMD, brillouin::BrillouinZone, ::Val{truncation}; modulate::Bool=true, atol=atol) where truncation
     @assert isa(truncation, Int) "trihoppings error: truncation must be an integer."
     datatype = dtype(brillouin)
-    neighbors = Bond{Int, Point{2, datatype}}[]
-    coordinates = SVector{2, datatype}[]
-    candidates = Set(1:truncation)
-    for bond in bonds(Lattice(zeros(datatype, 2); vectors=reciprocals(bltmd.reciprocallattice.translations)), truncation)
-        if bond.kind∈candidates
-            pop!(candidates, bond.kind)
-            push!(neighbors, bond)
-            push!(coordinates, rcoordinate(bond))
-        end
-    end
-    reverse!(neighbors)
-    reverse!(coordinates)
-    values = zero(MVector{truncation, ComplexF64})
-    for momentum in brillouin
-        eigenvalue = eigvals(matrix(bltmd; k=momentum))[end]
-        for i = 1:truncation
-            values[i] += exp(-1im*dot(momentum, coordinates[i]))*eigenvalue
-        end
-    end
-    return concatenate(map((value::Number, neighbor::Bond)->trihoppings(value/length(brillouin), neighbor; modulate=modulate), NTuple{truncation, eltype(values)}(values), NTuple{truncation, eltype(neighbors)}(neighbors))...)
+    neighbors = tribonds(bltmd, truncation, datatype)
+    values = trivalues(bltmd, neighbors, brillouin)
+    return concatenate(map((value::Vector{<:Number}, neighbor::Vector{<:Bond})->trihoppings(value, neighbor; modulate=modulate, atol=atol), NTuple{truncation, eltype(values)}(values), NTuple{truncation, eltype(neighbors)}(neighbors))...)
 end
-@inline trihoppings(bltmd::Algorithm{<:BLTMD}, brillouin::BrillouinZone, truncation; modulate::Bool=true) = trihoppings(bltmd.frontend, brillouin, truncation; modulate=modulate)
-function trihoppings(value::Number, neighbor::Bond; modulate::Bool=true)
-    @assert length(neighbor)==2 "trihoppings error: `neighbor` should be a rank-2 bond."
-    @assert isa(neighbor.kind, Int) "trihoppings error: bond kind of `neighbor` should be an integer."
-    θ₀ = azimuth(rcoordinate(neighbor))
-    amplitude = bond::Bond->-1im*exp(3im*azimuth(rcoordinate(bond))-θ₀)
-    suffix = join('₀'+d for d in digits(neighbor.kind))
+@inline trihoppings(bltmd::Algorithm{<:BLTMD}, brillouin::BrillouinZone, truncation; modulate::Bool=true, atol=atol) = trihoppings(bltmd.frontend, brillouin, truncation; modulate=modulate, atol=atol)
+function trihoppings(value::Vector{<:Number}, neighbor::Vector{<:Bond}; modulate::Bool=true, atol=atol)
+    @assert all(v->isapprox(real(v), real(value[1]); atol=atol) && isapprox(abs(imag(v)), abs(imag(value[1])); atol=atol), value) "trihoppings error: unexpected behavior."
+    @assert all(n->length(n)==2, neighbor) "trihoppings error: `neighbor` should be a vector of rank-2 bonds."
+    @assert all(n->isa(n.kind, Int), neighbor) "trihoppings error: bond kind of each `neighbor` should be an integer."
+    θs = map(n->azimuthd(rcoordinate(n)), neighbor)
+    signs = map(v->isapprox(imag(v), 0; atol=atol) ? 1 : round(Int, imag(value[1])/imag(v)), value)
+    function amplitude(bond::Bond)
+        θ = azimuthd(rcoordinate(bond))
+        for (sign, θ₀) in zip(signs, θs)
+            Δ = (θ-θ₀)/60
+            isapprox(round(Int, Δ), Δ; atol=atol) && return -1im*sign*cosd(3*(θ-θ₀))
+        end
+        error("amplitude error: mismatched bond.")
+    end
+    suffix = join('₀'+d for d in digits(neighbor[1].kind))
     return (
-        Hopping(Symbol("t", suffix), Complex(real(value)), neighbor.kind; modulate=modulate),
-        Hopping(Symbol("λ", suffix), Complex(imag(value)), neighbor.kind, MatrixCoupling(:, FID, :, σ"z", :); amplitude=amplitude, modulate=modulate)
+        Hopping(Symbol("t", suffix), Complex(real(value[1])), neighbor[1].kind; modulate=modulate),
+        Hopping(Symbol("λ", suffix), Complex(imag(value[1])), neighbor[1].kind, MatrixCoupling(:, FID, :, σ"z", :); amplitude=amplitude, modulate=modulate)
     )
 end
+
+"""
+    chemicalpotential(bltmd::Union{BLTMD, Algorithm{<:BLTMD}}, brillouinzone::BrillouinZone) -> Term
+
+Get the chemical potential term.
+"""
+function chemicalpotential(bltmd::BLTMD, brillouinzone::BrillouinZone)
+    μ = 0.0
+    for momentum in brillouinzone
+        μ += eigvals(matrix(bltmd; k=momentum))[end]
+    end
+    μ /= length(brillouinzone)
+    return Onsite(:μ, μ)
+end
+@inline chemicalpotential(bltmd::Algorithm{<:BLTMD}, brillouinzone::BrillouinZone) = chemicalpotential(bltmd.frontend, brillouinzone)
 
 # runtime initialization
 function __init__()
