@@ -66,11 +66,11 @@ end
 end
 
 """
-    MoireReciprocalLattice{T<:Number} <: AbstractLattice{2, T}
+    MoireReciprocalLattice{T<:Number} <: AbstractLattice{2, T, 0}
 
 Moire reciprocal lattice with truncation.
 """
-struct MoireReciprocalLattice{T<:Number} <: AbstractLattice{2, T}
+struct MoireReciprocalLattice{T<:Number} <: AbstractLattice{2, T, 0}
     Γ::SVector{2, T}
     K₊::SVector{2, T}
     K₋::SVector{2, T}
