@@ -24,7 +24,7 @@ struct CommensurateBilayerHoneycomb
     displacement::SVector{2, Float64}
     center::SVector{2, Float64}
     coordinates::Matrix{Float64}
-    vectors::Vector{SVector{2, Float64}}
+    vectors::SVector{2, SVector{2, Float64}}
     function CommensurateBilayerHoneycomb(characters::Tuple{Int, Int}; stack::Symbol=:AA, center::Symbol=:carbon)
         @assert gcd(characters[1], characters[2])==1 "CommensurateBilayerHoneycomb error: not coprime integers."
         @assert stack∈(:AA, :AB) "CommensurateBilayerHoneycomb error: not supported stack."
@@ -33,7 +33,7 @@ struct CommensurateBilayerHoneycomb
         coordinates = [1/3*a₁+2/3*a₂;; 2/3*a₁+1/3*a₂]
         displacement = stack==:AA ? SVector(0.0, 0.0) : -1/3*a₁+1/3*a₂
         center = center==:carbon ? SVector(coordinates[1, 1], coordinates[2, 1]) : SVector(0.0, 0.0)
-        new(characters, displacement, center, coordinates, [a₁, a₂])
+        new(characters, displacement, center, coordinates, SVector(a₁, a₂))
     end
 end
 @recipe function plot(moire::CommensurateBilayerHoneycomb, choice::Symbol)
@@ -41,7 +41,7 @@ end
     m, r = moire.characters
     θ = acos((3m^2+3m*r+r^2/2)/(3m^2+3m*r+r^2))
     n = 2*ceil(Int, √((3*m^2+3*m*r+r^2)/gcd(r, 3)))
-    vectors₁, vectors₂ = map(v->rotate(v, +θ/2), moire.vectors), map(v->rotate(v, -θ/2), moire.vectors)
+    vectors₁, vectors₂ = map(v->SVector{2}(rotate(v, +θ/2)), moire.vectors), map(v->SVector{2}(rotate(v, -θ/2)), moire.vectors)
     (t₁, t₂) = r%3==0 ? ((m+r÷3)*vectors₂[1]+(m+2r÷3)*vectors₂[2], -r÷3*vectors₂[1]+(m+r÷3)*vectors₂[2]) : (m*vectors₂[1]+(2m+r)*vectors₂[2], -(m+r)*vectors₂[1]+m*vectors₂[2])
     title --> "Twisted Bilayer Honeycomb ($(decimaltostr(rad2deg(θ)))°)"
     aspect_ratio := :equal
@@ -50,18 +50,18 @@ end
         coordinates₁ = rotate(moire.coordinates, +θ/2; axis=(moire.center, (0, 0)))
         coordinates₂ = rotate(moire.coordinates.+reshape(moire.displacement, :, 1), -θ/2; axis=(moire.center, (0, 0)))
         neighbors = Neighbors(1=>distance(moire.coordinates[:, 1], moire.coordinates[:, 2]))
-        @series Lattice(Lattice{2}(:top, coordinates₁, vectors₁), (2n, 2n); mode=:center), neighbors
-        @series Lattice(Lattice{2}(:bottom, coordinates₂, vectors₂), (2n, 2n); mode=:center), neighbors
+        @series Lattice(Lattice(:top, coordinates₁, vectors₁), (2n, 2n); mode=:center), neighbors
+        @series Lattice(Lattice(:bottom, coordinates₂, vectors₂), (2n, 2n); mode=:center), neighbors
         arrow := true
         linewidth := 2
         [moire.center[1], t₁[1]+moire.center[1], NaN, moire.center[1], t₂[1]+moire.center[1]], [moire.center[2], t₁[2]+moire.center[2], NaN, moire.center[2], t₂[2]+moire.center[2]]
     else
         recipls₁ = reciprocals(vectors₁)
         recipls₂ = reciprocals(vectors₂)
-        @series Lattice([mapreduce(*, +, hexagon60°map[key], recipls₁) for key in ("K₁", "K₂", "K₃", "K₄", "K₅", "K₆")]...), 1, bond::Bond->bond.kind==1
-        @series Lattice([mapreduce(*, +, hexagon60°map[key], recipls₂) for key in ("K₁", "K₂", "K₃", "K₄", "K₅", "K₆")]...), 1, bond::Bond->bond.kind==1
+        @series Lattice([collect(mapreduce(*, +, hexagon60°map[key], recipls₁)) for key in ("K₁", "K₂", "K₃", "K₄", "K₅", "K₆")]...), 1, bond::Bond->bond.kind==1
+        @series Lattice([collect(mapreduce(*, +, hexagon60°map[key], recipls₂)) for key in ("K₁", "K₂", "K₃", "K₄", "K₅", "K₆")]...), 1, bond::Bond->bond.kind==1
         recipls = reciprocals([t₁, t₂])
-        Lattice(Lattice([mapreduce(*, +, hexagon120°map[key], recipls) for key in ("K₁", "K₂")]...; vectors=recipls), (n, n); mode=:center), 1, bond::Bond->bond.kind==1
+        Lattice(Lattice([collect(mapreduce(*, +, hexagon120°map[key], recipls)) for key in ("K₁", "K₂")]...; vectors=recipls), (n, n); mode=:center), 1, bond::Bond->bond.kind==1
     end
 end
 

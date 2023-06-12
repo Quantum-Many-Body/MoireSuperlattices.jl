@@ -3,3 +3,4 @@
 *.jl.mem
 desktop.ini
 /docs/build/
+test/*.png

@@ -1,6 +1,6 @@
-using MoireSuperlattices
 using Test
+using SafeTestsets
 
-@testset "MoireSuperlattices.jl" begin
-    # Write your tests here.
+@safetestset "MoireSuperlattices.jl" begin
+    include("MoireSuperlattices.jl")
 end
