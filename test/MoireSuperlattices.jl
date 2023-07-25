@@ -19,12 +19,10 @@ end
 
     emin, emax = -40.0, 40.0
     recipls = bltmd.frontend.reciprocallattice.translations
-    lattice = Lattice([0.0, 0.0]; vectors=reciprocals(recipls))
+    lattice = MoireTriangular(6, reciprocals(recipls))
     hilbert = Hilbert(1=>Fock{:f}(1, 2))
     brillouinzone = BrillouinZone(recipls, 24)
-    terms = trihoppings(bltmd, brillouinzone, 6; atol=10^-6)
-    μ = chemicalpotential(bltmd, brillouinzone)
-    tba = Algorithm(:tba, TBA(lattice, hilbert, (terms..., μ)))
+    tba = Algorithm(:tba, TBA(lattice, hilbert, terms(bltmd, lattice, brillouinzone; atol=10^-6)))
     @test all(map((x, y)->isapprox(x, y, atol=10^-6), collect(tba.parameters), [-2.7598267, -4.3678292, -1.3035002, 0.0, 0.2447067, -0.6094541, -0.2700574, -0.3888003, 0.0260020, -0.0308282, -0.2999706, 0.0, 10.2102190]))
     plt = plot()
     plot!(plt, bltmd(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₁-M₁-Γ", length=100))), ylim=(emin, emax), color="blue", title="")
