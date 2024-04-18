@@ -263,7 +263,7 @@ end
 """
     BLTMD(a₀::Number, m::Number, θ::Number, Vᶻ::Number, μ::Number, V::Number, ψ::Number, w::Number; truncation::Int=4)
 
-[Continuum model of twisted transition metal dichalcogenide homobilayers](@ref https://journals.aps.org/prl/pdf/10.1103/PhysRevLett.122.086402).
+[Continuum model of twisted transition metal dichalcogenide homobilayers](https://journals.aps.org/prl/pdf/10.1103/PhysRevLett.122.086402).
 
 Here, the parameters are as follows:
 * `a₀`: monolayer lattice constant (Å)
