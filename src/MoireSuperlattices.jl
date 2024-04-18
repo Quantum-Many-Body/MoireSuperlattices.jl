@@ -2,7 +2,7 @@ module MoireSuperlattices
 
 using LinearAlgebra: dot, eigvals, norm
 using Printf: @printf
-using QuantumLattices: atol, hexagon120°map, hexagon60°map
+using QuantumLattices: atol, hexagon120°map, hexagon60°map, plain
 using QuantumLattices: AbstractLattice, Algorithm, Bond, BrillouinZone, CompositeIID, CompositeIndex, Coupling, FID, Hilbert, Hopping, ID, IIDSpace, Index
 using QuantumLattices: Lattice, LaTeX, MatrixCoupling, Neighbors, Onsite, OperatorGenerator, OperatorUnitToTuple, Point, SimpleIID, SimpleInternal, Table, Term
 using QuantumLattices: azimuth, azimuthd, bonds, concatenate, decimaltostr, dimension, distance, dtype, latexformat, reciprocals, rank, rcoordinate, rotate, update, @σ_str
@@ -287,7 +287,7 @@ function BLTMD(a₀::Number, m::Number, θ::Number, Vᶻ::Number, μ::Number, V:
     )
     hilbert = Hilbert(site=>MoireSpace(1, 2, 1, 1) for site=1:length(reciprocallattice))
     table = Table(hilbert, OperatorUnitToTuple(:site, :layer))
-    return BLTMD((a₀=T(a₀), m=T(m), θ=T(θ), Vᶻ=T(Vᶻ), μ=T(μ)), reciprocallattice, bltmd!, OperatorGenerator(terms, bonds(reciprocallattice, 1), hilbert; half=false, table=table))
+    return BLTMD((a₀=T(a₀), m=T(m), θ=T(θ), Vᶻ=T(Vᶻ), μ=T(μ)), reciprocallattice, bltmd!, OperatorGenerator(terms, bonds(reciprocallattice, 1), hilbert, plain, table; half=false))
 end
 @inline function bltmd!(dest, a₀, m, θ, Vᶻ, μ, k, K₊, K₋; offset)
     m₀ = 0.0001312169949060677
