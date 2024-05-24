@@ -229,7 +229,7 @@ abstract type MoireSystem{H<:OperatorGenerator, Hₘ<:Image} <: AbstractTBA{Ferm
 @inline function update!(moire::MoireSystem; parameters...)
     moire.parameters = update(moire.parameters; parameters...)
     update!(getcontent(moire, :H); parameters...)
-    update!(getcontent(moire, :Hₘ), getcontent(moire, :H))
+    update!(getcontent(moire, :Hₘ); parameters...)
 end
 @inline function matrix(moire::MoireSystem; k, kwargs...)
     nblock = count(moire)
