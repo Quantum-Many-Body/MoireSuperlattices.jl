@@ -284,8 +284,8 @@ function BLTMD(a₀::Number, m::Number, θ::Number, Vᶻ::Number, μ::Number, V:
         Term{:TMD}(:interlayer₃, w, 1, bond::Bond->(ϕ=azimuthd(rcoordinate(bond)); ϕ≈120 ? Coupling(:, MoireSpinor, :, (2, 1), :, :, :) : ϕ≈300 ? Coupling(:, MoireSpinor, :, (1, 2), :, :, :) : Coupling(0, :, MoireSpinor, :, (0, 0), :, :, :)), false),
     )
     hilbert = Hilbert(site=>MoireSpace(1, 2, 1, 1) for site=1:length(reciprocallattice))
+    H = OperatorGenerator(terms, bonds(reciprocallattice, 1), hilbert, plain, lazy; half=false)
     table = Table(hilbert, OperatorUnitToTuple(:site, :layer))
-    H = OperatorGenerator(terms, bonds(reciprocallattice, 1), hilbert, plain, table, lazy; half=false)
     return BLTMD((a₀=a₀, m=m, θ=θ, Vᶻ=Vᶻ, μ=μ), reciprocallattice, bltmd!, H, QuadraticFormalize{Fermionic{:TBA}}(table)(H))
 end
 @inline function bltmd!(dest, a₀, m, θ, Vᶻ, μ, k, K₊, K₋; offset)
