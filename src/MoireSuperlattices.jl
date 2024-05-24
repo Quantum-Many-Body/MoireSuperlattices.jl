@@ -286,7 +286,7 @@ function BLTMD(a₀::Number, m::Number, θ::Number, Vᶻ::Number, μ::Number, V:
     hilbert = Hilbert(site=>MoireSpace(1, 2, 1, 1) for site=1:length(reciprocallattice))
     table = Table(hilbert, OperatorUnitToTuple(:site, :layer))
     H = OperatorGenerator(terms, bonds(reciprocallattice, 1), hilbert, plain, table, lazy; half=false)
-    return BLTMD((a₀=a₀, m=m, θ=θ, Vᶻ=Vᶻ, μ=μ), reciprocallattice, bltmd!, H, QuadraticFormalize{Fermionic{:TBA}, valtype(eltype(H))}(table)(H))
+    return BLTMD((a₀=a₀, m=m, θ=θ, Vᶻ=Vᶻ, μ=μ), reciprocallattice, bltmd!, H, QuadraticFormalize{Fermionic{:TBA}}(table)(H))
 end
 @inline function bltmd!(dest, a₀, m, θ, Vᶻ, μ, k, K₊, K₋; offset)
     m₀ = 0.0001312169949060677
