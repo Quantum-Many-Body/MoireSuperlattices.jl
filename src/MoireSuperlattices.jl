@@ -4,11 +4,11 @@ using LinearAlgebra: dot, eigvals, norm
 using Printf: @printf
 using QuantumLattices: atol, hexagon120°map, hexagon60°map, plain
 using QuantumLattices: AbstractLattice, Algorithm, Bond, BrillouinZone, CompositeIID, CompositeIndex, Coupling, FID, Hilbert, Hopping, ID, IIDSpace, Index
-using QuantumLattices: Lattice, LaTeX, MatrixCoupling, Neighbors, Onsite, OperatorGenerator, OperatorUnitToTuple, Point, SimpleIID, SimpleInternal, Table, Term
+using QuantumLattices: lazy, Image, Lattice, LaTeX, MatrixCoupling, Neighbors, Onsite, OperatorGenerator, OperatorUnitToTuple, Point, SimpleIID, SimpleInternal, Table, Term
 using QuantumLattices: azimuth, azimuthd, bonds, concatenate, decimaltostr, dimension, distance, dtype, latexformat, reciprocals, rank, rcoordinate, rotate, update, @σ_str
 using RecipesBase: RecipesBase, @recipe, @series
 using StaticArrays: SVector
-using TightBindingApproximation: AbstractTBA, Fermionic
+using TightBindingApproximation: AbstractTBA, Fermionic, QuadraticFormalize
 
 import QuantumLattices: diagonalizablefields, getcontent, iidtype, isdefinite, latexname, matrix, script, shape, statistics, update!
 
@@ -137,7 +137,6 @@ function MoireTriangular(truncation::Int, vectors::AbstractVector{<:AbstractVect
             else
                 for i = 1:length(neighbors[bond.kind])
                     another = neighbors[bond.kind][i]
-                    # θ = acosd(dot(coordinate, another)/norm(coordinate)/norm(another))/60
                     θ = acos(dot(coordinate, another)/norm(coordinate)/norm(another))/(pi/3)
                     isapprox(round(Int, convert(Float64, θ)), convert(Float64, θ); atol=atol) && break
                     if i==length(neighbors[bond.kind])
@@ -221,15 +220,16 @@ end
 @inline moireshape(v::Rational{Int}, n::Int) = (@assert(abs(v)<=(n-1)//2, "shape error: out of range."); index=Int(v+(n-1)//2)+1; index:index)
 
 """
-    MoireSystem{H<:OperatorGenerator} <: AbstractTBA{Fermionic{:TBA}, H, Nothing}
+    MoireSystem{H<:OperatorGenerator, Hₘ<:Image} <: AbstractTBA{Fermionic{:TBA}, Hₘ, Nothing}
 
 The continuum model of Moire systems.
 """
-abstract type MoireSystem{H<:OperatorGenerator} <: AbstractTBA{Fermionic{:TBA}, H, Nothing} end
+abstract type MoireSystem{H<:OperatorGenerator, Hₘ<:Image} <: AbstractTBA{Fermionic{:TBA}, Hₘ, Nothing} end
 @inline getcontent(moire::MoireSystem, ::Val{:commutator}) = nothing
 @inline function update!(moire::MoireSystem; parameters...)
     moire.parameters = update(moire.parameters; parameters...)
     update!(getcontent(moire, :H); parameters...)
+    update!(getcontent(moire, :Hₘ), getcontent(moire, :H))
 end
 @inline function matrix(moire::MoireSystem; k, kwargs...)
     nblock = count(moire)
@@ -239,24 +239,23 @@ end
     for i = 1:length(reciprocallattice)
         diagonal!(result, moire.parameters..., k+reciprocallattice[i]+reciprocallattice.Γ, reciprocallattice.K₊, reciprocallattice.K₋; offset=(i-1)*nblock)
     end
-    H = getcontent(moire, :H)
-    for operator in H
-        seq₁, seq₂ = H.table[operator[1].index'], H.table[operator[2].index]
-        result[seq₁, seq₂] += operator.value
+    for operator in getcontent(moire, :Hₘ)
+        result[operator.position...] += operator.value
     end
     return result
 end
 
 """
-    BLTMD{T<:Number, L<:MoireReciprocalLattice, D<:Function, H<:OperatorGenerator} <: MoireSystem{H}
+    BLTMD{L<:MoireReciprocalLattice, D<:Function, H<:OperatorGenerator} <: MoireSystem{H}
 
 Twisted transition metal dichalcogenide homobilayers.
 """
-mutable struct BLTMD{T<:Number, L<:MoireReciprocalLattice, D<:Function, H<:OperatorGenerator} <: MoireSystem{H}
-    parameters::NamedTuple{(:a₀, :m, :θ, :Vᶻ, :μ), NTuple{5, T}}
+mutable struct BLTMD{L<:MoireReciprocalLattice, D<:Function, H<:OperatorGenerator, Hₘ<:Image} <: MoireSystem{H, Hₘ}
+    parameters::NamedTuple{(:a₀, :m, :θ, :Vᶻ, :μ), NTuple{5, Float64}}
     const reciprocallattice::L
     const diagonal!::D
     const H::H
+    const Hₘ::Hₘ
 end
 @inline Base.count(bltmd::BLTMD) = (bltmd.H.hilbert)[1].nlayer * (bltmd.H.hilbert)[1].nsublattice
 
@@ -276,18 +275,18 @@ Here, the parameters are as follows:
 * `w`: interlayer hopping amplitude (meV)
 """
 function BLTMD(a₀::Number, m::Number, θ::Number, Vᶻ::Number, μ::Number, V::Number, ψ::Number, w::Number; truncation::Int=4)
-    T = promote_type(typeof(a₀), typeof(m), typeof(θ), typeof(Vᶻ), typeof(μ), typeof(V), typeof(ψ), typeof(w))
-    reciprocallattice = MoireReciprocalLattice(truncation, T)
+    reciprocallattice = MoireReciprocalLattice(truncation)
     terms = (
         Term{:TMD}(:potentialᵣ, V*cosd(ψ), 1, Coupling{2}(:, MoireSpinor, :, :, :, :, :), false),
-        Term{:TMD}(:potentialᵢ, Complex(V*sind(ψ)), 1, bond::Bond->(sign=exp(3im*azimuth(rcoordinate(bond))); (Coupling(-1im*sign, :, MoireSpinor, :, (1, 1), :, :, :), Coupling(1im*sign, :, MoireSpinor, :, (2, 2), :, :, :))), false),
+        Term{:TMD}(:potentialᵢ, V*sind(ψ), 1, bond::Bond->(sign=round(Int, real(exp(3im*azimuth(rcoordinate(bond)))))::Int; (Coupling(-1im*sign, :, MoireSpinor, :, (1, 1), :, :, :), Coupling(1im*sign, :, MoireSpinor, :, (2, 2), :, :, :))), false),
         Term{:TMD}(:interlayer₁, w, 0, Coupling(:, MoireSpinor, :, (2, 1), :, :, :), false),
         Term{:TMD}(:interlayer₂, w, 1, bond::Bond->(ϕ=azimuthd(rcoordinate(bond)); ϕ≈60 ? Coupling(:, MoireSpinor, :, (2, 1), :, :, :) : ϕ≈240 ? Coupling(:, MoireSpinor, :, (1, 2), :, :, :) : Coupling(0, :, MoireSpinor, :, (0, 0), :, :, :)), false),
         Term{:TMD}(:interlayer₃, w, 1, bond::Bond->(ϕ=azimuthd(rcoordinate(bond)); ϕ≈120 ? Coupling(:, MoireSpinor, :, (2, 1), :, :, :) : ϕ≈300 ? Coupling(:, MoireSpinor, :, (1, 2), :, :, :) : Coupling(0, :, MoireSpinor, :, (0, 0), :, :, :)), false),
     )
     hilbert = Hilbert(site=>MoireSpace(1, 2, 1, 1) for site=1:length(reciprocallattice))
     table = Table(hilbert, OperatorUnitToTuple(:site, :layer))
-    return BLTMD((a₀=T(a₀), m=T(m), θ=T(θ), Vᶻ=T(Vᶻ), μ=T(μ)), reciprocallattice, bltmd!, OperatorGenerator(terms, bonds(reciprocallattice, 1), hilbert, plain, table; half=false))
+    H = OperatorGenerator(terms, bonds(reciprocallattice, 1), hilbert, plain, table, lazy; half=false)
+    return BLTMD((a₀=a₀, m=m, θ=θ, Vᶻ=Vᶻ, μ=μ), reciprocallattice, bltmd!, H, QuadraticFormalize{Fermionic{:TBA}, valtype(eltype(H))}(table)(H))
 end
 @inline function bltmd!(dest, a₀, m, θ, Vᶻ, μ, k, K₊, K₋; offset)
     m₀ = 0.0001312169949060677
@@ -312,7 +311,8 @@ end
 end
 
 """
-    coefficients(bltmd::Union{BLTMD, Algorithm{<:BLTMD}}, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd)) -> Tuple{Vector{Vector{ComplexF64}}, Float64}
+    coefficients(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd)) -> Tuple{Vector{Vector{ComplexF64}}, Float64}
+    coefficients(bltmd::Algorithm{<:BLTMD}, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd.frontend)) -> Tuple{Vector{Vector{ComplexF64}}, Float64}
 
 Get the coefficients of the hoppings and chemical potential of a bilayer TMD on the emergent triangular lattice.
 """
@@ -329,21 +329,22 @@ function coefficients(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::Bri
     end
     return hoppings, μ
 end
-@inline function coefficients(bltmd::Algorithm{<:BLTMD}, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd))
+@inline function coefficients(bltmd::Algorithm{<:BLTMD}, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd.frontend))
     return coefficients(bltmd.frontend, lattice, brillouinzone; band=band)
 end 
 
 """
-    terms(bltmd::Union{BLTMD, Algorithm{<:BLTMD}}, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd), modulate::Bool=true, atol=atol) -> NTuple{2*truncation(lattice)+1, Term}
+    terms(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd), ismodulatable::Bool=true, atol=atol) -> NTuple{2*truncation(lattice)+1, Term}
+    terms(bltmd::Algorithm{<:BLTMD}, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd.frontend), ismodulatable::Bool=true, atol=atol) -> NTuple{2*truncation(lattice)+1, Term}
 
 Get the hopping terms and chemical potential of a bilayer TMD on the emergent triangular lattice.
 """
-function terms(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd), modulate::Bool=true, atol=atol)
+function terms(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd), ismodulatable::Bool=true, atol=atol)
     tvals, μval = coefficients(bltmd, lattice, brillouinzone; band=band)
     hoppings = map(NTuple{truncation(lattice), eltype(tvals)}(tvals), lattice.neighbors, ntuple(i->i, Val(truncation(lattice)))) do values, neighbor, order
         @assert all(value->isapprox(real(value), real(values[1]); atol=atol) && isapprox(abs(imag(value)), abs(imag(values[1])); atol=atol), values) "terms error: unexpected behavior."
-        θs = map(azimuthd, neighbor)
-        signs = map(value->isapprox(imag(value), 0; atol=atol) ? 1 : round(Int, imag(values[1])/imag(value)), values)
+        θs = ntuple(i->azimuthd(neighbor[i]), length(neighbor))
+        signs = ntuple(i->isapprox(imag(values[i]), 0; atol=atol) ? 1 : round(Int, imag(values[1])/imag(values[i])), length(values))
         function amplitude(bond::Bond)
             θ = azimuthd(rcoordinate(bond))
             for (sign, θ₀) in zip(signs, θs)
@@ -354,15 +355,15 @@ function terms(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::BrillouinZ
         end
         suffix = join('₀'+d for d in digits(order))
         return (
-            Hopping(Symbol("t", suffix), Complex(real(values[1])), order; modulate=modulate),
-            Hopping(Symbol("λ", suffix), Complex(imag(values[1])), order, MatrixCoupling(:, FID, :, σ"z", :); amplitude=amplitude, modulate=modulate)
+            Hopping(Symbol("t", suffix), real(values[1]), order; ismodulatable=ismodulatable),
+            Hopping(Symbol("λ", suffix), imag(values[1]), order, MatrixCoupling(:, FID, :, σ"z", :); amplitude=amplitude, ismodulatable=ismodulatable)
         )
     end
     μ = Onsite(:μ, Complex(μval))
     return (concatenate(hoppings...)..., μ)
 end
-@inline function terms(bltmd::Algorithm{<:BLTMD}, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd), modulate::Bool=true, atol=atol)
-    return terms(bltmd.frontend, lattice, brillouinzone; band=band, modulate=modulate, atol=atol)
+@inline function terms(bltmd::Algorithm{<:BLTMD}, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd.frontend), ismodulatable::Bool=true, atol=atol)
+    return terms(bltmd.frontend, lattice, brillouinzone; band=band, ismodulatable=ismodulatable, atol=atol)
 end
 
 # runtime initialization
