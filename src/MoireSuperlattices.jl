@@ -36,11 +36,11 @@ struct CommensurateBilayerHoneycomb
         new(characters, displacement, center, coordinates, SVector(a₁, a₂))
     end
 end
-@recipe function plot(moire::CommensurateBilayerHoneycomb, choice::Symbol)
+@recipe function plot(moire::CommensurateBilayerHoneycomb, choice::Symbol; n=nothing, topcolor=:red, bottomcolor=:blue, vector=true, vectorcolor=:green, moirecolor=:black, anglecolor=:grey)
     @assert choice∈(:lattice, :reciprocal) "plot error: incorrect choice."
     m, r = moire.characters
     θ = acos((3m^2+3m*r+r^2/2)/(3m^2+3m*r+r^2))
-    n = 2*ceil(Int, √((3*m^2+3*m*r+r^2)/gcd(r, 3)))
+    isnothing(n) && (n = 2*ceil(Int, √((3*m^2+3*m*r+r^2)/gcd(r, 3))))
     vectors₁, vectors₂ = map(v->SVector{2}(rotate(v, +θ/2)), moire.vectors), map(v->SVector{2}(rotate(v, -θ/2)), moire.vectors)
     (t₁, t₂) = r%3==0 ? ((m+r÷3)*vectors₂[1]+(m+2r÷3)*vectors₂[2], -r÷3*vectors₂[1]+(m+r÷3)*vectors₂[2]) : (m*vectors₂[1]+(2m+r)*vectors₂[2], -(m+r)*vectors₂[1]+m*vectors₂[2])
     title --> "Twisted Bilayer Honeycomb ($(decimaltostr(rad2deg(θ)))°)"
@@ -50,17 +50,39 @@ end
         coordinates₁ = rotate(moire.coordinates, +θ/2; axis=(moire.center, (0, 0)))
         coordinates₂ = rotate(moire.coordinates.+reshape(moire.displacement, :, 1), -θ/2; axis=(moire.center, (0, 0)))
         neighbors = Neighbors(1=>distance(moire.coordinates[:, 1], moire.coordinates[:, 2]))
-        @series Lattice(Lattice(:top, coordinates₁, vectors₁), (2n, 2n); mode=:center), neighbors
-        @series Lattice(Lattice(:bottom, coordinates₂, vectors₂), (2n, 2n); mode=:center), neighbors
+        @series begin
+            color --> topcolor
+            Lattice(Lattice(:top, coordinates₁, vectors₁), (2n, 2n); mode=:center), neighbors
+        end
+        @series begin
+            color --> bottomcolor
+            Lattice(Lattice(:bottom, coordinates₂, vectors₂), (2n, 2n); mode=:center), neighbors
+        end
         arrow := true
         linewidth := 2
+        color --> vectorcolor
+        alpha := (vector ? 1.0 : 0.0)
         [moire.center[1], t₁[1]+moire.center[1], NaN, moire.center[1], t₂[1]+moire.center[1]], [moire.center[2], t₁[2]+moire.center[2], NaN, moire.center[2], t₂[2]+moire.center[2]]
     else
         recipls₁ = reciprocals(vectors₁)
         recipls₂ = reciprocals(vectors₂)
-        @series Lattice([collect(mapreduce(*, +, hexagon60°map[key], recipls₁)) for key in ("K₁", "K₂", "K₃", "K₄", "K₅", "K₆")]...), 1, bond::Bond->bond.kind==1
-        @series Lattice([collect(mapreduce(*, +, hexagon60°map[key], recipls₂)) for key in ("K₁", "K₂", "K₃", "K₄", "K₅", "K₆")]...), 1, bond::Bond->bond.kind==1
+        @series begin
+            color --> topcolor
+            Lattice([collect(mapreduce(*, +, hexagon60°map[key], recipls₁)) for key in ("K₁", "K₂", "K₃", "K₄", "K₅", "K₆")]...), 1, bond::Bond->bond.kind==1
+        end
+        @series begin
+            color --> bottomcolor
+            Lattice([collect(mapreduce(*, +, hexagon60°map[key], recipls₂)) for key in ("K₁", "K₂", "K₃", "K₄", "K₅", "K₆")]...), 1, bond::Bond->bond.kind==1
+        end
+        @series begin
+            color --> anglecolor
+            Kt = collect(mapreduce(*, +, hexagon60°map["K₂"], recipls₁))
+            Kb = collect(mapreduce(*, +, hexagon60°map["K₂"], recipls₂))
+            linestyle := :dot
+            [0.0, Kt[1], NaN, 0.0, Kb[1]], [0.0, Kt[2], NaN, 0.0, Kb[2]]
+        end
         recipls = reciprocals([t₁, t₂])
+        color --> moirecolor
         Lattice(Lattice([collect(mapreduce(*, +, hexagon120°map[key], recipls)) for key in ("K₁", "K₂")]...; vectors=recipls), (n, n); mode=:center), 1, bond::Bond->bond.kind==1
     end
 end
