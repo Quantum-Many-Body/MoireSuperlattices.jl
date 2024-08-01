@@ -2,13 +2,12 @@ module MoireSuperlattices
 
 using LinearAlgebra: dot, eigvals, norm
 using Printf: @printf
-using QuantumLattices: atol, hexagon120°map, hexagon60°map, plain
-using QuantumLattices: AbstractLattice, Algorithm, Bond, BrillouinZone, CompositeIID, CompositeIndex, Coupling, FID, Hilbert, Hopping, ID, IIDSpace, Index
-using QuantumLattices: lazy, Image, Lattice, LaTeX, MatrixCoupling, Neighbors, Onsite, OperatorGenerator, OperatorUnitToTuple, Point, SimpleIID, SimpleInternal, Table, Term
+using QuantumLattices: atol, hexagon120°map, hexagon60°map, lazy, plain
+using QuantumLattices: AbstractLattice, Algorithm, Bond, BrillouinZone, CompositeIID, CompositeIndex, Coupling, FID, Hilbert, Hopping, ID, IIDSpace, Index, Image, Lattice, LaTeX, MatrixCoupling, Neighbors, Onsite, OperatorGenerator, OperatorUnitToTuple, Point, SimpleIID, SimpleInternal, Table, Term
 using QuantumLattices: azimuth, azimuthd, bonds, concatenate, decimaltostr, dimension, distance, dtype, latexformat, reciprocals, rank, rcoordinate, rotate, update, @σ_str
 using RecipesBase: RecipesBase, @recipe, @series
 using StaticArrays: SVector
-using TightBindingApproximation: AbstractTBA, Fermionic, QuadraticFormalize
+using TightBindingApproximation: AbstractTBA, Fermionic, Quadraticization
 
 import QuantumLattices: diagonalizablefields, getcontent, iidtype, isdefinite, latexname, matrix, script, shape, statistics, update!
 
@@ -308,7 +307,7 @@ function BLTMD(a₀::Number, m::Number, θ::Number, Vᶻ::Number, μ::Number, V:
     hilbert = Hilbert(site=>MoireSpace(1, 2, 1, 1) for site=1:length(reciprocallattice))
     H = OperatorGenerator(terms, bonds(reciprocallattice, 1), hilbert, plain, lazy; half=false)
     table = Table(hilbert, OperatorUnitToTuple(:site, :layer))
-    return BLTMD((a₀=a₀, m=m, θ=θ, Vᶻ=Vᶻ, μ=μ), reciprocallattice, bltmd!, H, QuadraticFormalize{Fermionic{:TBA}}(table)(H))
+    return BLTMD((a₀=a₀, m=m, θ=θ, Vᶻ=Vᶻ, μ=μ), reciprocallattice, bltmd!, H, Quadraticization{Fermionic{:TBA}}(table)(H))
 end
 @inline function bltmd!(dest, a₀, m, θ, Vᶻ, μ, k, K₊, K₋; offset)
     m₀ = 0.0001312169949060677
