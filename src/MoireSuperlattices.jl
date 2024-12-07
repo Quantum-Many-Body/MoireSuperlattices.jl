@@ -90,9 +90,9 @@ The total number of atoms in the unitcell of the Moire superlattice is 4 times t
 @inline function Base.count(moire::CommensurateBilayerHoneycomb)
     m, r = moire.characters
     if r%3 == 0
-        return (m+r÷3)^2 + (m+2r÷3)*r÷3
+        return m^2 + m*r + r^2÷3
     else
-        return m^2 + (2m+r)*(m+r)
+        return 3m^2 + 3m*r + r^2
     end
 end
 

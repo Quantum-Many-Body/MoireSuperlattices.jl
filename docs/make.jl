@@ -18,7 +18,7 @@ makedocs(;
         "Home" => "index.md",
         "Examples" => [
             "examples/Introduction.md",
-            "examples/Geometry.md",
+            "examples/Visualization.md",
             "examples/HomobilayerTMD.md",
         ],
         "Manual" => "manual.md",

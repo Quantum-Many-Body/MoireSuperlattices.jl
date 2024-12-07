@@ -8,7 +8,7 @@ Here are some examples to illustrate how this package could be used.
 
 ```@contents
 Pages = [
-        "Geometry.md",
+        "Visualization.md",
         "HomobilayerTMD.md",
         ]
 Depth = 2
