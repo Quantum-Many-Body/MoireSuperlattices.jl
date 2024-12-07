@@ -30,7 +30,7 @@ end
 end
 
 @time @testset "MoireTriangular" begin
-    lattice = MoireTriangular(6, [[1.0, 0.0], [0.5, √3/2]])
+    lattice = MoireTriangular(6, [[1.0, 0.0], [0.5, √3/2]]; origin=[0.0, 0.0])
     @test truncation(lattice) == truncation(typeof(lattice)) == 6
     @test lattice.coordinates == [0.0; 0.0;;]
     @test lattice.vectors == [[1.0, 0.0], [0.5, √3/2]]
