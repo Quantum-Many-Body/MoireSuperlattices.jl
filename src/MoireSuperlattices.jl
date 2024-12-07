@@ -2,16 +2,16 @@ module MoireSuperlattices
 
 using LinearAlgebra: dot, eigvals, norm
 using Printf: @printf
-using QuantumLattices: atol, hexagon120°map, hexagon60°map, lazy, plain
-using QuantumLattices: AbstractLattice, Algorithm, Bond, BrillouinZone, CompositeIID, CompositeIndex, Coupling, FID, Hilbert, Hopping, ID, IIDSpace, Index, Image, Lattice, LaTeX, MatrixCoupling, Neighbors, Onsite, OperatorGenerator, OperatorUnitToTuple, Point, SimpleIID, SimpleInternal, Table, Term
-using QuantumLattices: azimuth, azimuthd, bonds, concatenate, decimaltostr, dimension, distance, dtype, latexformat, reciprocals, rank, rcoordinate, rotate, update, @σ_str
+using QuantumLattices: annihilation, atol, creation, hexagon120°map, hexagon60°map, lazy, plain
+using QuantumLattices: AbstractLattice, Algorithm, Bond, BrillouinZone, CategorizedGenerator, CompositeIndex, Coupling, Hilbert, Hopping, Index, LaTeX, Lattice, Neighbors, Onsite, OperatorGenerator, OperatorSum, OperatorUnitToTuple, SimpleInternal, SimpleInternalIndex, Table, Term
+using QuantumLattices: azimuth, azimuthd, bonds, concatenate, distance, dtype, latexformat, reciprocals, rcoordinate, rotate, tostr, update, 𝕗⁺𝕗, @σ_str
 using RecipesBase: RecipesBase, @recipe, @series
 using StaticArrays: SVector
-using TightBindingApproximation: AbstractTBA, Fermionic, Quadraticization
+using TightBindingApproximation: TBA, Fermionic, Quadratic, Quadraticization
 
-import QuantumLattices: diagonalizablefields, getcontent, iidtype, isdefinite, latexname, matrix, script, shape, statistics, update!
+import QuantumLattices: Parameters, allequalfields, contentnames, dimension, getcontent, indextype, isdefinite, latexname, matrix, patternrule, script, shape, statistics, update!
 
-export BLTMD, CommensurateBilayerHoneycomb, MoireEmergentSuperLattice, MoireReciprocalLattice, MoireSpace, MoireSpinor, MoireSystem, MoireTriangular, bltmd!, bltmdmap, coefficients, terms
+export BLTMD, CommensurateBilayerHoneycomb, MoireReciprocalLattice, MoireSpace, MoireSpinor, MoireSuperlattice, MoireSystem, MoireTriangular, bltmd!, bltmdmap, coefficients, terms, truncation, vectors
 
 """
     CommensurateBilayerHoneycomb
@@ -35,27 +35,88 @@ struct CommensurateBilayerHoneycomb
         new(characters, displacement, center, coordinates, SVector(a₁, a₂))
     end
 end
-@recipe function plot(moire::CommensurateBilayerHoneycomb, choice::Symbol; n=nothing, topcolor=:red, bottomcolor=:blue, vector=true, vectorcolor=:green, moirecolor=:black, anglecolor=:grey)
-    @assert choice∈(:lattice, :reciprocal) "plot error: incorrect choice."
+
+"""
+    angle(moire::CommensurateBilayerHoneycomb) -> Float64
+
+Get the twist angle of a commensurate Moire superlattice composed of two layers of honeycomb lattices.
+"""
+@inline function Base.angle(moire::CommensurateBilayerHoneycomb)
     m, r = moire.characters
-    θ = acos((3m^2+3m*r+r^2/2)/(3m^2+3m*r+r^2))
-    isnothing(n) && (n = 2*ceil(Int, √((3*m^2+3*m*r+r^2)/gcd(r, 3))))
-    vectors₁, vectors₂ = map(v->SVector{2}(rotate(v, +θ/2)), moire.vectors), map(v->SVector{2}(rotate(v, -θ/2)), moire.vectors)
-    (t₁, t₂) = r%3==0 ? ((m+r÷3)*vectors₂[1]+(m+2r÷3)*vectors₂[2], -r÷3*vectors₂[1]+(m+r÷3)*vectors₂[2]) : (m*vectors₂[1]+(2m+r)*vectors₂[2], -(m+r)*vectors₂[1]+m*vectors₂[2])
-    title --> "Twisted Bilayer Honeycomb ($(decimaltostr(rad2deg(θ)))°)"
+    return acos((3m^2+3m*r+r^2/2)/(3m^2+3m*r+r^2))
+end
+
+"""
+    Lattice(moire::CommensurateBilayerHoneycomb, type::Symbol)
+
+Get the minimum unit of the top/bottom layer of a commensurate Moire superlattice composed of two layers of honeycomb lattices.
+"""
+@inline function Lattice(moire::CommensurateBilayerHoneycomb, type::Symbol)
+    @assert type∈(:top, :bottom) "Lattice error: incorrect type (`:$type`), which should be either `:top` or `:bottom`."
+    m, r, θ = moire.characters..., angle(moire)
+    if type == :top
+        coordinates = rotate(moire.coordinates, +θ/2; axis=(moire.center, (0, 0)))
+        vectors = map(v->SVector{2}(rotate(v, +θ/2)), moire.vectors)
+        return Lattice(:top, coordinates, vectors)
+    else
+        coordinates = rotate(moire.coordinates.+reshape(moire.displacement, :, 1), -θ/2; axis=(moire.center, (0, 0)))
+        vectors = map(v->SVector{2}(rotate(v, -θ/2)), moire.vectors)
+        return Lattice(:bottom, coordinates, vectors)
+    end
+end
+
+"""
+    vectors(moire::CommensurateBilayerHoneycomb) -> SVector{2, SVector{2, Float64}}
+
+Get the translation vectors of a commensurate Moire superlattice composed of two layers of honeycomb lattices.
+"""
+@inline function vectors(moire::CommensurateBilayerHoneycomb)
+    m, r, θ = moire.characters..., angle(moire)
+    v₁, v₂ = map(v->SVector{2}(rotate(v, -θ/2)), moire.vectors)
+    if r%3 == 0
+        return SVector((m+r÷3)*v₁+(m+2r÷3)*v₂, -r÷3*v₁+(m+r÷3)*v₂)
+    else 
+        return SVector(m*v₁+(2m+r)*v₂, -(m+r)*v₁+m*v₂)
+    end
+end
+
+"""
+    count(moire::CommensurateBilayerHoneycomb) -> Int
+
+Count the number of honeycomb unitcells contained in the unitcell of a commensurate Moire superlattice composed of two layers of honeycomb lattices.
+
+The total number of atoms in the unitcell of the Moire superlattice is 4 times this result because of the AB sublattice and the top/bottom layer degrees of freedom.
+"""
+@inline function Base.count(moire::CommensurateBilayerHoneycomb)
+    m, r = moire.characters
+    if r%3 == 0
+        return (m+r÷3)^2 + (m+2r÷3)*r÷3
+    else
+        return m^2 + (2m+r)*(m+r)
+    end
+end
+
+"""
+    plot(moire::CommensurateBilayerHoneycomb, choice::Symbol, n=2*ceil(Int, √count(moire)); topcolor=:red, bottomcolor=:blue, vector=true, vectorcolor=:green, moirecolor=:black, anglecolor=:grey)
+
+Plot a Moire superlattice composed of two layers of honeycomb lattices in the real space or in the reciprocal space.
+"""
+@recipe function plot(moire::CommensurateBilayerHoneycomb, choice::Symbol, n=2*ceil(Int, √count(moire)); topcolor=:red, bottomcolor=:blue, vector=true, vectorcolor=:green, moirecolor=:black, anglecolor=:grey)
+    @assert choice∈(:real, :reciprocal) "plot error: incorrect choice (`:$choice`), which should be either `:real` or `:reciprocal`."
+    θ = angle(moire)
+    top, bottom, (t₁, t₂) = Lattice(moire, :top), Lattice(moire, :bottom), vectors(moire)
+    title --> "Twisted Bilayer Honeycomb ($(tostr(rad2deg(θ)))°)"
     aspect_ratio := :equal
     legend := false
-    if choice==:lattice
-        coordinates₁ = rotate(moire.coordinates, +θ/2; axis=(moire.center, (0, 0)))
-        coordinates₂ = rotate(moire.coordinates.+reshape(moire.displacement, :, 1), -θ/2; axis=(moire.center, (0, 0)))
+    if choice == :real
         neighbors = Neighbors(1=>distance(moire.coordinates[:, 1], moire.coordinates[:, 2]))
         @series begin
             color --> topcolor
-            Lattice(Lattice(:top, coordinates₁, vectors₁), (2n, 2n); mode=:center), neighbors
+            Lattice(top, (2n, 2n); mode=:center), neighbors
         end
         @series begin
             color --> bottomcolor
-            Lattice(Lattice(:bottom, coordinates₂, vectors₂), (2n, 2n); mode=:center), neighbors
+            Lattice(bottom, (2n, 2n); mode=:center), neighbors
         end
         arrow := true
         linewidth := 2
@@ -63,8 +124,8 @@ end
         alpha := (vector ? 1.0 : 0.0)
         [moire.center[1], t₁[1]+moire.center[1], NaN, moire.center[1], t₂[1]+moire.center[1]], [moire.center[2], t₁[2]+moire.center[2], NaN, moire.center[2], t₂[2]+moire.center[2]]
     else
-        recipls₁ = reciprocals(vectors₁)
-        recipls₂ = reciprocals(vectors₂)
+        recipls₁ = reciprocals(top)
+        recipls₂ = reciprocals(bottom)
         @series begin
             color --> topcolor
             Lattice([collect(mapreduce(*, +, hexagon60°map[key], recipls₁)) for key in ("K₁", "K₂", "K₃", "K₄", "K₅", "K₆")]...), 1, bond::Bond->bond.kind==1
@@ -113,18 +174,18 @@ end
 @inline getcontent(moire::MoireReciprocalLattice, ::Val{:vectors}) = SVector{0, SVector{2, dtype(moire)}}()
 
 """
-    MoireEmergentSuperLattice{D<:Number} <: AbstractLattice{2, D, 2}
+    MoireSuperlattice{D<:Number} <: AbstractLattice{2, D, 2}
 
 Abstract type of the emergent superlattices in Moire systems.
 """
-abstract type MoireEmergentSuperLattice{D<:Number} <: AbstractLattice{2, D, 2} end
+abstract type MoireSuperlattice{D<:Number} <: AbstractLattice{2, D, 2} end
 
 """
-    MoireTriangular{N, D<:Number} <: MoireEmergentSuperLattice{D}
+    MoireTriangular{N, D<:Number} <: MoireSuperlattice{D}
 
 Emergent triangular superlattice in Moire systems.
 """
-struct MoireTriangular{N, D<:Number} <: MoireEmergentSuperLattice{D}
+struct MoireTriangular{N, D<:Number} <: MoireSuperlattice{D}
     name::Symbol
     coordinates::Matrix{D}
     vectors::SVector{2, SVector{2, D}}
@@ -171,28 +232,55 @@ function MoireTriangular(truncation::Int, vectors::AbstractVector{<:AbstractVect
 end
 
 """
-    MoireSpinor{V<:Union{Int, Colon}, L<:Union{Int, Colon}, S<:Union{Int, Colon}, P<:Union{Rational{Int}, Colon}, N<:Union{Int, Colon}} <: SimpleIID
+    MoireSpinor{V<:Union{Int, Colon}, L<:Union{Int, Colon}, S<:Union{Int, Colon}, P<:Union{Rational{Int}, Colon}, N<:Union{Int, Colon}} <: SimpleInternalIndex
 
 The index of the internal degrees of freedom of Moire systems.
 """
-struct MoireSpinor{V<:Union{Int, Colon}, L<:Union{Int, Colon}, S<:Union{Int, Colon}, P<:Union{Rational{Int}, Colon}, N<:Union{Int, Colon}} <: SimpleIID
+struct MoireSpinor{V<:Union{Int, Colon}, L<:Union{Int, Colon}, S<:Union{Int, Colon}, P<:Union{Rational{Int}, Colon}, N<:Union{Int, Colon}} <: SimpleInternalIndex
     valley::V
     layer::L
     sublattice::S
     spin::P
     nambu::N
-    function MoireSpinor(valley::Union{Int, Colon}, layer::Union{Int, Colon}, sublattice::Union{Int, Colon}, spin::Union{Rational{Int}, Colon}, nambu::Union{Int, Colon})
+    function MoireSpinor(valley::Union{Int, Colon}, layer::Union{Int, Colon}, sublattice::Union{Int, Colon}, spin::Union{Rational{Int}, Int, Colon}, nambu::Union{Int, Colon})
         @assert spin∈(-1//2, 1//2, 0, :) "MoireSpinor error: incorrect spin ($spin)."
         isa(nambu, Int) && @assert nambu∈(1, 2) "MoireSpinor error: wrong nambu ($nambu)."
+        isa(spin, Int) && (spin = convert(Rational{Int}, spin))
         new{typeof(valley), typeof(layer), typeof(sublattice), typeof(spin), typeof(nambu)}(valley, layer, sublattice, spin, nambu)
     end
 end
-@inline Base.adjoint(spinor::MoireSpinor{<:Union{Int, Colon}, <:Union{Int, Colon}, <:Union{Int, Colon}, <:Union{Rational{Int}, Colon}, Int}) = MoireSpinor(spinor.valley, spinor.layer, spinor.sublattice, spinor.spin, 3-spinor.nambu)
-@inline Base.show(io::IO, spinor::MoireSpinor) = @printf io "MoireSpinor(%s)" join((spinor.valley|>default, spinor.layer|>default, spinor.sublattice|>default, spinor.spin|>default, spinor.nambu|>default), ", ")
+# basic methods of concrete SimpleInternalIndex
+@inline function Base.adjoint(spinor::MoireSpinor{<:Union{Int, Colon}, <:Union{Int, Colon}, <:Union{Int, Colon}, <:Union{Rational{Int}, Colon}, Int})
+    return MoireSpinor(spinor.valley, spinor.layer, spinor.sublattice, spinor.spin, 3-spinor.nambu)
+end
+@inline function Base.show(io::IO, spinor::MoireSpinor)
+    @printf io "MoireSpinor(%s)" join((spinor.valley|>default, spinor.layer|>default, spinor.sublattice|>default, spinor.spin|>default, spinor.nambu|>default), ", ")
+end
+@inline default(::Colon) = ":"
+@inline default(value::Int) = string(value)
+@inline default(value::Rational{Int}) = value.den==1 ? string(value.num) : string(value)
 @inline statistics(::Type{<:MoireSpinor}) = :f
-default(::Colon) = ":"
-default(value::Int) = string(value)
-default(value::Rational{Int}) = value.den==1 ? string(value.num) : string(value)
+@inline isdefinite(::Type{MoireSpinor{Int, Int, Int, Rational{Int}, Int}}) = true
+# requested by InternalPattern
+@inline allequalfields(::Type{<:MoireSpinor}) = (:valley, :layer, :sublattice, :spin)
+# requested by MatrixCoupling
+@inline function indextype(::Type{MoireSpinor}, ::Type{V}, ::Type{L}, ::Type{S}, ::Type{P}, ::Type{N}) where {V<:Union{Int, Colon}, L<:Union{Int, Colon}, S<:Union{Int, Colon}, P<:Union{Rational{Int}, Colon}, N<:Union{Int, Colon}}
+    return MoireSpinor{V, L, S, P, N}
+end
+
+# patternrule
+@inline patternrule(::NTuple{N, Colon}, ::Val{}, ::Type{<:MoireSpinor}, ::Val{:nambu}) where N = ntuple(i->isodd(i) ? creation : annihilation, Val(N))
+@inline MoireSpinor{V, L, S, P, N}(valley, layer, sublattice, spin, nambu) where {V, L, S, P, N} = MoireSpinor(valley, layer, sublattice, spin, nambu)
+
+# LaTeX format output
+@inline script(spinor::MoireSpinor, ::Val{:valley}; kwargs...) = spinor.valley==(:) ? ":" : string(spinor.valley)
+@inline script(spinor::MoireSpinor, ::Val{:layer}; kwargs...) = spinor.layer==(:) ? ":" : string(spinor.layer)
+@inline script(spinor::MoireSpinor, ::Val{:sublattice}; kwargs...) = spinor.sublattice==(:) ? ":" : string(spinor.sublattice)
+@inline script(spinor::MoireSpinor, ::Val{:spin}; kwargs...) = spinor.spin==(:) ? ":" : spinor.spin==0 ? "" : spinor.spin==1//2 ? "↑" : "↓"
+@inline script(spinor::MoireSpinor, ::Val{:nambu}; kwargs...) = spinor.nambu==(:) ? ":" : spinor.nambu==2 ? "\\dagger" : ""
+@inline latexname(::Type{<:MoireSpinor}) = Symbol("MoireSpinor")
+@inline latexname(::Type{<:Index{<:MoireSpinor}}) = Symbol("Index{MoireSpinor}")
+@inline latexname(::Type{<:CompositeIndex{<:Index{<:MoireSpinor}}}) = Symbol("CompositeIndex{Index{MoireSpinor}}")
 
 """
     MoireSpace <: SimpleInternal{MoireSpinor{Int, Int, Int, Rational{Int}, Int}}
@@ -206,34 +294,15 @@ struct MoireSpace <: SimpleInternal{MoireSpinor{Int, Int, Int, Rational{Int}, In
     nspin::Int
 end
 @inline shape(moire::MoireSpace) = (1:moire.nvalley, 1:moire.nlayer, 1:moire.nsublattice, 1:moire.nspin, 1:2)
-@inline Base.CartesianIndex(spinor::MoireSpinor, moire::MoireSpace) = CartesianIndex(spinor.valley, spinor.layer, spinor.sublattice, Int(spinor.spin+(moire.nspin-1)//2)+1, spinor.nambu)
-@inline MoireSpinor(index::CartesianIndex{5}, moire::MoireSpace) = MoireSpinor(index[1], index[2], index[3], index[4]-1-(moire.nspin-1)//2, index[5])
-
-# LaTeX formatted outputs
-@inline script(::Val{:valley}, spinor::MoireSpinor; kwargs...) = spinor.valley==(:) ? ":" : string(spinor.valley)
-@inline script(::Val{:layer}, spinor::MoireSpinor; kwargs...) = spinor.layer==(:) ? ":" : string(spinor.layer)
-@inline script(::Val{:sublattice}, spinor::MoireSpinor; kwargs...) = spinor.sublattice==(:) ? ":" : string(spinor.sublattice)
-@inline script(::Val{:spin}, spinor::MoireSpinor; kwargs...) = spinor.spin==(:) ? ":" : spinor.spin==0 ? "" : spinor.spin==1//2 ? "↑" : "↓"
-@inline script(::Val{:nambu}, spinor::MoireSpinor; kwargs...) = spinor.nambu==(:) ? ":" : spinor.nambu==2 ? "\\dagger" : ""
-@inline latexname(::Type{<:MoireSpinor}) = Symbol("MoireSpinor")
-@inline latexname(::Type{<:Index{<:Union{Int, Colon}, <:MoireSpinor}}) = Symbol("Index{Union{Int, Colon}, MoireSpinor}")
-@inline latexname(::Type{<:CompositeIndex{<:Index{<:Union{Int, Colon}, <:MoireSpinor}}}) = Symbol("CompositeIndex{Index{Union{Int, Colon}, MoireSpinor}}")
-
-# Coupling related
-@inline isdefinite(::Type{MoireSpinor{Int, Int, Int, Rational{Int}, Int}}) = true
-@inline iidtype(::Type{MoireSpinor}, ::Type{V}, ::Type{L}, ::Type{S}, ::Type{P}, ::Type{N}) where {V<:Union{Int, Colon}, L<:Union{Int, Colon}, S<:Union{Int, Colon}, P<:Union{Rational{Int}, Colon}, N<:Union{Int, Colon}} = MoireSpinor{V, L, S, P, N}
-@inline diagonalizablefields(::Type{<:Index{<:Union{Int, Colon}, <:MoireSpinor}}) = (:valley, :layer, :sublattice, :spin)
-@inline function CompositeIID(coupling::Coupling{V, I}, info::Val=Val(:term)) where {V, I<:ID{<:Index{<:Union{Int, Colon}, <:MoireSpinor}}}
-    return CompositeIID(map((spinor::MoireSpinor, order::Int)->MoireSpinor(spinor.valley, spinor.layer, spinor.sublattice, spinor.spin, nambu(spinor.nambu, order)), coupling.indexes.iids, ntuple(i->i, Val(rank(I)))))
-end
-@inline nambu(::Colon, order::Int) = order%2==1 ? 2 : 1
-@inline nambu(nambu::Int, ::Int) = nambu
-@inline function shape(iidspace::IIDSpace{<:MoireSpinor, MoireSpace})
-    valley = moireshape(iidspace.iid.valley, iidspace.internal.nvalley)
-    layer = moireshape(iidspace.iid.layer, iidspace.internal.nlayer)
-    sublattice = moireshape(iidspace.iid.sublattice, iidspace.internal.nsublattice)
-    spin = moireshape(iidspace.iid.spin, iidspace.internal.nspin)
-    nambu = iidspace.iid.nambu:iidspace.iid.nambu
+@inline Base.convert(::Type{<:CartesianIndex}, spinor::MoireSpinor, moire::MoireSpace) = CartesianIndex(spinor.valley, spinor.layer, spinor.sublattice, Int(spinor.spin+(moire.nspin-1)//2)+1, spinor.nambu)
+@inline Base.convert(::Type{<:MoireSpinor}, index::CartesianIndex{5}, moire::MoireSpace) = MoireSpinor(index[1], index[2], index[3], index[4]-1-(moire.nspin-1)//2, index[5])
+# requested by ConstrainedInternal
+@inline function shape(moire::MoireSpace, spinor::MoireSpinor{<:Union{Int, Colon}, <:Union{Int, Colon}, <:Union{Int, Colon}, <:Union{Rational{Int}, Colon}, Int})
+    valley = moireshape(spinor.valley, moire.nvalley)
+    layer = moireshape(spinor.layer, moire.nlayer)
+    sublattice = moireshape(spinor.sublattice, moire.nsublattice)
+    spin = moireshape(spinor.spin, moire.nspin)
+    nambu = spinor.nambu:spinor.nambu
     return (valley, layer, sublattice, spin, nambu)
 end
 @inline moireshape(::Colon, n::Int) = 1:n
@@ -241,44 +310,59 @@ end
 @inline moireshape(v::Rational{Int}, n::Int) = (@assert(abs(v)<=(n-1)//2, "shape error: out of range."); index=Int(v+(n-1)//2)+1; index:index)
 
 """
-    MoireSystem{H<:OperatorGenerator, Hₘ<:Image} <: AbstractTBA{Fermionic{:TBA}, Hₘ, Nothing}
+    MoireSystem{P<:Parameters, L<:MoireReciprocalLattice, D<:Function, S<:OperatorGenerator, Q<:Quadraticization, H<:CategorizedGenerator{<:OperatorSum{<:Quadratic}}} <: TBA{Fermionic{:TBA}, H, Nothing}
 
 The continuum model of Moire systems.
 """
-abstract type MoireSystem{H<:OperatorGenerator, Hₘ<:Image} <: AbstractTBA{Fermionic{:TBA}, Hₘ, Nothing} end
-@inline getcontent(moire::MoireSystem, ::Val{:commutator}) = nothing
+abstract type MoireSystem{P<:Parameters, L<:MoireReciprocalLattice, D<:Function, S<:OperatorGenerator, Q<:Quadraticization, H<:CategorizedGenerator{<:OperatorSum{<:Quadratic}}} <: TBA{Fermionic{:TBA}, H, Nothing} end
+@inline contentnames(::Type{<:MoireSystem}) = (:parameters, :reciprocallattice, :diagonal!, :system, :quadraticization, :H)
+@inline Parameters(moire::MoireSystem) = (; moire.parameters..., Parameters(getcontent(moire, :system))...)
+@inline dimension(moire::MoireSystem) = length(getcontent(moire, :quadraticization).table)
 @inline function update!(moire::MoireSystem; parameters...)
     moire.parameters = update(moire.parameters; parameters...)
+    update!(getcontent(moire, :system); parameters...)
     update!(getcontent(moire, :H); parameters...)
-    update!(getcontent(moire, :Hₘ); parameters...)
 end
-@inline function matrix(moire::MoireSystem; k, kwargs...)
+@inline function matrix(moire::MoireSystem, k::AbstractVector{<:Number}; kwargs...)
     nblock = count(moire)
     reciprocallattice = getcontent(moire, :reciprocallattice)
     diagonal! = getcontent(moire, :diagonal!)
-    result = zeros(valtype(moire), dimension(moire), dimension(moire))
+    result = zeros(dtype(moire), dimension(moire), dimension(moire))
     for i = 1:length(reciprocallattice)
         diagonal!(result, moire.parameters..., k+reciprocallattice[i]+reciprocallattice.Γ, reciprocallattice.K₊, reciprocallattice.K₋; offset=(i-1)*nblock)
     end
-    for operator in getcontent(moire, :Hₘ)
+    for operator in getcontent(moire, :H)
         result[operator.position...] += operator.value
     end
     return result
 end
 
 """
-    BLTMD{L<:MoireReciprocalLattice, D<:Function, H<:OperatorGenerator} <: MoireSystem{H}
+    BLTMD{
+        L<:MoireReciprocalLattice,
+        D<:Function,
+        S<:OperatorGenerator,
+        Q<:Quadraticization,
+        H<:CategorizedGenerator{<:OperatorSum{<:Quadratic}}
+    } <: MoireSystem{NamedTuple{(:a₀, :m, :θ, :Vᶻ, :μ), NTuple{5, Float64}}, L, D, S, Q, H}
 
 Twisted transition metal dichalcogenide homobilayers.
 """
-mutable struct BLTMD{L<:MoireReciprocalLattice, D<:Function, H<:OperatorGenerator, Hₘ<:Image} <: MoireSystem{H, Hₘ}
+mutable struct BLTMD{
+    L<:MoireReciprocalLattice,
+    D<:Function,
+    S<:OperatorGenerator,
+    Q<:Quadraticization,
+    H<:CategorizedGenerator{<:OperatorSum{<:Quadratic}}
+} <: MoireSystem{NamedTuple{(:a₀, :m, :θ, :Vᶻ, :μ), NTuple{5, Float64}}, L, D, S, Q, H}
     parameters::NamedTuple{(:a₀, :m, :θ, :Vᶻ, :μ), NTuple{5, Float64}}
     const reciprocallattice::L
     const diagonal!::D
+    const system::S
+    const quadraticization::Q
     const H::H
-    const Hₘ::Hₘ
 end
-@inline Base.count(bltmd::BLTMD) = (bltmd.H.hilbert)[1].nlayer * (bltmd.H.hilbert)[1].nsublattice
+@inline Base.count(bltmd::BLTMD) = (bltmd.system.hilbert)[1].nlayer * (bltmd.system.hilbert)[1].nsublattice
 
 """
     BLTMD(a₀::Number, m::Number, θ::Number, Vᶻ::Number, μ::Number, V::Number, ψ::Number, w::Number; truncation::Int=4)
@@ -296,18 +380,25 @@ Here, the parameters are as follows:
 * `w`: interlayer hopping amplitude (meV)
 """
 function BLTMD(a₀::Number, m::Number, θ::Number, Vᶻ::Number, μ::Number, V::Number, ψ::Number, w::Number; truncation::Int=4)
-    reciprocallattice = MoireReciprocalLattice(truncation)
+    coupling = Coupling{2}(:, MoireSpinor, :, :, :, :, :)
+    coupling₁₁ = Coupling(:, MoireSpinor, :, (1, 1), :, :, :)
+    coupling₁₂ = Coupling(:, MoireSpinor, :, (1, 2), :, :, :)
+    coupling₂₁ = Coupling(:, MoireSpinor, :, (2, 1), :, :, :)
+    coupling₂₂ = Coupling(:, MoireSpinor, :, (2, 2), :, :, :)
+    coupling₀ = Coupling(0, :, MoireSpinor, :, (0, 0), :, :, :)
     terms = (
-        Term{:TMD}(:potentialᵣ, V*cosd(ψ), 1, Coupling{2}(:, MoireSpinor, :, :, :, :, :), false),
-        Term{:TMD}(:potentialᵢ, V*sind(ψ), 1, bond::Bond->(sign=round(Int, real(exp(3im*azimuth(rcoordinate(bond)))))::Int; (Coupling(-1im*sign, :, MoireSpinor, :, (1, 1), :, :, :), Coupling(1im*sign, :, MoireSpinor, :, (2, 2), :, :, :))), false),
-        Term{:TMD}(:interlayer₁, w, 0, Coupling(:, MoireSpinor, :, (2, 1), :, :, :), false),
-        Term{:TMD}(:interlayer₂, w, 1, bond::Bond->(ϕ=azimuthd(rcoordinate(bond)); ϕ≈60 ? Coupling(:, MoireSpinor, :, (2, 1), :, :, :) : ϕ≈240 ? Coupling(:, MoireSpinor, :, (1, 2), :, :, :) : Coupling(0, :, MoireSpinor, :, (0, 0), :, :, :)), false),
-        Term{:TMD}(:interlayer₃, w, 1, bond::Bond->(ϕ=azimuthd(rcoordinate(bond)); ϕ≈120 ? Coupling(:, MoireSpinor, :, (2, 1), :, :, :) : ϕ≈300 ? Coupling(:, MoireSpinor, :, (1, 2), :, :, :) : Coupling(0, :, MoireSpinor, :, (0, 0), :, :, :)), false),
+        Term{:TMD}(:potentialᵣ, V*cosd(ψ), 1, coupling, false),
+        Term{:TMD}(:potentialᵢ, V*sind(ψ), 1, bond::Bond->(sign=round(Int, real(exp(3im*azimuth(rcoordinate(bond)))))::Int; (-1im*sign*coupling₁₁, 1im*sign*coupling₂₂)), false),
+        Term{:TMD}(:interlayer₁, w, 0, coupling₂₁, false),
+        Term{:TMD}(:interlayer₂, w, 1, bond::Bond->(ϕ=azimuthd(rcoordinate(bond)); ϕ≈60 ? coupling₂₁ : ϕ≈240 ? coupling₁₂ : coupling₀), false),
+        Term{:TMD}(:interlayer₃, w, 1, bond::Bond->(ϕ=azimuthd(rcoordinate(bond)); ϕ≈120 ? coupling₂₁ : ϕ≈300 ? coupling₁₂ : coupling₀), false),
     )
+    reciprocallattice = MoireReciprocalLattice(truncation)
     hilbert = Hilbert(site=>MoireSpace(1, 2, 1, 1) for site=1:length(reciprocallattice))
-    H = OperatorGenerator(terms, bonds(reciprocallattice, 1), hilbert, plain, lazy; half=false)
+    system = OperatorGenerator(terms, bonds(reciprocallattice, 1), hilbert, plain, lazy; half=false)
     table = Table(hilbert, OperatorUnitToTuple(:site, :layer))
-    return BLTMD((a₀=a₀, m=m, θ=θ, Vᶻ=Vᶻ, μ=μ), reciprocallattice, bltmd!, H, Quadraticization{Fermionic{:TBA}}(table)(H))
+    quadraticization = Quadraticization{Fermionic{:TBA}}(table)
+    return BLTMD((a₀=a₀, m=m, θ=θ, Vᶻ=Vᶻ, μ=μ), reciprocallattice, bltmd!, system, quadraticization, quadraticization(system))
 end
 @inline function bltmd!(dest, a₀, m, θ, Vᶻ, μ, k, K₊, K₋; offset)
     m₀ = 0.0001312169949060677
@@ -340,7 +431,7 @@ Get the coefficients of the hoppings and chemical potential of a bilayer TMD on 
 function coefficients(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd))
     hoppings, μ = [zeros(ComplexF64, length(neighbor)) for neighbor in lattice.neighbors], 0.0
     for momentum in brillouinzone
-        value = eigvals(matrix(bltmd; k=momentum))[band]/length(brillouinzone)
+        value = eigvals(matrix(bltmd, momentum))[band]/length(brillouinzone)
         for i = 1:length(lattice.neighbors)
             for j = 1:length(lattice.neighbors[i])
                 hoppings[i][j] += exp(-1im*dot(momentum, lattice.neighbors[i][j]))*value
@@ -355,43 +446,43 @@ end
 end 
 
 """
-    terms(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd), ismodulatable::Bool=true, atol=atol) -> NTuple{2*truncation(lattice)+1, Term}
-    terms(bltmd::Algorithm{<:BLTMD}, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd.frontend), ismodulatable::Bool=true, atol=atol) -> NTuple{2*truncation(lattice)+1, Term}
+    terms(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd), ismodulatable::Bool=true, tol=tol) -> NTuple{2*truncation(lattice)+1, Term}
+    terms(bltmd::Algorithm{<:BLTMD}, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd.frontend), ismodulatable::Bool=true, tol=tol) -> NTuple{2*truncation(lattice)+1, Term}
 
 Get the hopping terms and chemical potential of a bilayer TMD on the emergent triangular lattice.
 """
-function terms(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd), ismodulatable::Bool=true, atol=atol)
+function terms(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd), ismodulatable::Bool=true, tol=tol)
     tvals, μval = coefficients(bltmd, lattice, brillouinzone; band=band)
     hoppings = map(NTuple{truncation(lattice), eltype(tvals)}(tvals), lattice.neighbors, ntuple(i->i, Val(truncation(lattice)))) do values, neighbor, order
-        @assert all(value->isapprox(real(value), real(values[1]); atol=atol) && isapprox(abs(imag(value)), abs(imag(values[1])); atol=atol), values) "terms error: unexpected behavior."
+        @assert all(value->isapprox(real(value), real(values[1]); atol=tol) && isapprox(abs(imag(value)), abs(imag(values[1])); atol=tol), values) "terms error: unexpected behavior."
         θs = ntuple(i->azimuthd(neighbor[i]), length(neighbor))
-        signs = ntuple(i->isapprox(imag(values[i]), 0; atol=atol) ? 1 : round(Int, imag(values[1])/imag(values[i])), length(values))
+        signs = ntuple(i->isapprox(imag(values[i]), 0; atol=tol) ? 1 : round(Int, imag(values[1])/imag(values[i])), length(values))
         function amplitude(bond::Bond)
             θ = azimuthd(rcoordinate(bond))
             for (sign, θ₀) in zip(signs, θs)
                 Δ = (θ-θ₀)/60
-                isapprox(round(Int, Δ), Δ; atol=atol) && return -1im*sign*cosd(3*(θ-θ₀))
+                isapprox(round(Int, Δ), Δ; atol=tol) && return -1im*sign*cosd(3*(θ-θ₀))
             end
             error("amplitude error: mismatched bond.")
         end
         suffix = join('₀'+d for d in digits(order))
         return (
             Hopping(Symbol("t", suffix), real(values[1]), order; ismodulatable=ismodulatable),
-            Hopping(Symbol("λ", suffix), imag(values[1]), order, MatrixCoupling(:, FID, :, σ"z", :); amplitude=amplitude, ismodulatable=ismodulatable)
+            Hopping(Symbol("λ", suffix), imag(values[1]), order, 𝕗⁺𝕗(:, :, σ"z", :); amplitude=amplitude, ismodulatable=ismodulatable)
         )
     end
     μ = Onsite(:μ, Complex(μval))
     return (concatenate(hoppings...)..., μ)
 end
-@inline function terms(bltmd::Algorithm{<:BLTMD}, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd.frontend), ismodulatable::Bool=true, atol=atol)
-    return terms(bltmd.frontend, lattice, brillouinzone; band=band, ismodulatable=ismodulatable, atol=atol)
+@inline function terms(bltmd::Algorithm{<:BLTMD}, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd.frontend), ismodulatable::Bool=true, tol=tol)
+    return terms(bltmd.frontend, lattice, brillouinzone; band=band, ismodulatable=ismodulatable, tol=tol)
 end
 
 # runtime initialization
 function __init__()
-    latexformat(MoireSpinor, LaTeX{(:nambu,), (:layer,)}('c'))
-    latexformat(Index{<:Union{Int, Colon}, <:MoireSpinor}, LaTeX{(:nambu,), (:site, :layer)}('c'))
-    latexformat(CompositeIndex{<:Index{<:Union{Int, Colon}, <:MoireSpinor}}, LaTeX{(:nambu,), (:site, :layer)}('c'))
+    latexformat(MoireSpinor, LaTeX{(:nambu,), (:layer, :spin)}('c'))
+    latexformat(Index{<:MoireSpinor}, LaTeX{(:nambu,), (:site, :layer, :spin)}('c'))
+    latexformat(CompositeIndex{<:Index{<:MoireSpinor}}, LaTeX{(:nambu,), (:site, :layer, :spin)}('c'))
     nothing
 end
 
