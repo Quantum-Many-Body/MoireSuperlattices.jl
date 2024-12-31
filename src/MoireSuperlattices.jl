@@ -3,8 +3,8 @@ module MoireSuperlattices
 using LinearAlgebra: dot, eigvals, norm
 using Printf: @printf
 using QuantumLattices: annihilation, atol, creation, hexagon120°map, hexagon60°map, lazy, plain
-using QuantumLattices: AbstractLattice, Algorithm, Bond, BrillouinZone, CategorizedGenerator, CompositeIndex, Coupling, Hilbert, Hopping, Index, LaTeX, Lattice, Neighbors, Onsite, OperatorGenerator, OperatorSum, OperatorUnitToTuple, SimpleInternal, SimpleInternalIndex, Table, Term
-using QuantumLattices: azimuth, azimuthd, bonds, concatenate, distance, dtype, latexformat, reciprocals, rcoordinate, rotate, tostr, update, 𝕗⁺𝕗, @σ_str
+using QuantumLattices: AbstractLattice, Algorithm, Bond, BrillouinZone, CategorizedGenerator, CompositeIndex, Coupling, Hilbert, Hopping, Index, LaTeX, Lattice, Neighbors, Onsite, OperatorGenerator, OperatorIndexToTuple, OperatorSum, SimpleInternal, SimpleInternalIndex, Table, Term
+using QuantumLattices: azimuth, azimuthd, bonds, concatenate, distance, latexformat, reciprocals, rcoordinate, rotate, scalartype, tostr, update, 𝕔⁺𝕔, @σ_str
 using RecipesBase: RecipesBase, @recipe, @series
 using StaticArrays: SVector
 using TightBindingApproximation: TBA, Fermionic, Quadratic, Quadraticization
@@ -171,7 +171,7 @@ struct MoireReciprocalLattice{T<:Number} <: AbstractLattice{2, T, 0}
     end
 end
 @inline getcontent(moire::MoireReciprocalLattice, ::Val{:name}) = :truncation
-@inline getcontent(moire::MoireReciprocalLattice, ::Val{:vectors}) = SVector{0, SVector{2, dtype(moire)}}()
+@inline getcontent(moire::MoireReciprocalLattice, ::Val{:vectors}) = SVector{0, SVector{2, scalartype(moire)}}()
 
 """
     MoireSuperlattice{D<:Number} <: AbstractLattice{2, D, 2}
@@ -327,7 +327,7 @@ end
     nblock = count(moire)
     reciprocallattice = getcontent(moire, :reciprocallattice)
     diagonal! = getcontent(moire, :diagonal!)
-    result = zeros(dtype(moire), dimension(moire), dimension(moire))
+    result = zeros(scalartype(moire), dimension(moire), dimension(moire))
     for i = 1:length(reciprocallattice)
         diagonal!(result, moire.parameters..., k+reciprocallattice[i]+reciprocallattice.Γ, reciprocallattice.K₊, reciprocallattice.K₋; offset=(i-1)*nblock)
     end
@@ -395,8 +395,8 @@ function BLTMD(a₀::Number, m::Number, θ::Number, Vᶻ::Number, μ::Number, V:
     )
     reciprocallattice = MoireReciprocalLattice(truncation)
     hilbert = Hilbert(site=>MoireSpace(1, 2, 1, 1) for site=1:length(reciprocallattice))
-    system = OperatorGenerator(terms, bonds(reciprocallattice, 1), hilbert, plain, lazy; half=false)
-    table = Table(hilbert, OperatorUnitToTuple(:site, :layer))
+    system = OperatorGenerator(bonds(reciprocallattice, 1), hilbert, terms, plain, lazy; half=false)
+    table = Table(hilbert, OperatorIndexToTuple(:site, :layer))
     quadraticization = Quadraticization{Fermionic{:TBA}}(table)
     return BLTMD((a₀=a₀, m=m, θ=θ, Vᶻ=Vᶻ, μ=μ), reciprocallattice, bltmd!, system, quadraticization, quadraticization(system))
 end
@@ -468,7 +468,7 @@ function terms(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::BrillouinZ
         suffix = join('₀'+d for d in digits(order))
         return (
             Hopping(Symbol("t", suffix), real(values[1]), order; ismodulatable=ismodulatable),
-            Hopping(Symbol("λ", suffix), imag(values[1]), order, 𝕗⁺𝕗(:, :, σ"z", :); amplitude=amplitude, ismodulatable=ismodulatable)
+            Hopping(Symbol("λ", suffix), imag(values[1]), order, 𝕔⁺𝕔(:, :, σ"z", :); amplitude=amplitude, ismodulatable=ismodulatable)
         )
     end
     μ = Onsite(:μ, Complex(μval))
