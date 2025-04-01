@@ -3,13 +3,13 @@ module MoireSuperlattices
 using LinearAlgebra: dot, eigvals, norm
 using Printf: @printf
 using QuantumLattices: annihilation, atol, creation, hexagon120°map, hexagon60°map, lazy, plain
-using QuantumLattices: AbstractLattice, Algorithm, Bond, BrillouinZone, CategorizedGenerator, CompositeIndex, Coupling, Hilbert, Hopping, Index, LaTeX, Lattice, Neighbors, Onsite, OperatorGenerator, OperatorIndexToTuple, OperatorSum, SimpleInternal, SimpleInternalIndex, Table, Term
+using QuantumLattices: AbstractLattice, Bond, BrillouinZone, CategorizedGenerator, CompositeIndex, Coupling, Hilbert, Hopping, Index, LaTeX, Lattice, Neighbors, Onsite, OperatorGenerator, OperatorIndexToTuple, OperatorSum, SimpleInternal, SimpleInternalIndex, Table, Term
 using QuantumLattices: azimuth, azimuthd, bonds, concatenate, distance, latexformat, reciprocals, rcoordinate, rotate, scalartype, tostr, update, 𝕔⁺𝕔, @σ_str
 using RecipesBase: RecipesBase, @recipe, @series
 using StaticArrays: SVector
 using TightBindingApproximation: TBA, Fermionic, Quadratic, Quadraticization
 
-import QuantumLattices: Parameters, allequalfields, contentnames, dimension, getcontent, indextype, isdefinite, latexname, matrix, patternrule, script, shape, statistics, update!
+import QuantumLattices: Algorithm, Parameters, allequalfields, contentnames, dimension, getcontent, indextype, isdefinite, latexname, matrix, patternrule, script, shape, statistics, update!
 
 export BLTMD, CommensurateBilayerHoneycomb, MoireReciprocalLattice, MoireSpace, MoireSpinor, MoireSuperlattice, MoireSystem, MoireTriangular, bltmd!, bltmdmap, coefficients, terms, truncation, vectors
 
@@ -420,6 +420,15 @@ end
         interlayer₂=parameters[:w],
         interlayer₃=parameters[:w]
     )
+end
+
+"""
+    Algorithm(name::Symbol, bltmd::BLTMD, parameters::Parameters; kwargs...)
+
+Construct an `Algorithm` with a `BLTMD` as the frontend.
+"""
+@inline function Algorithm(name::Symbol, bltmd::BLTMD, parameters::Parameters; kwargs...)
+    return Algorithm(name, bltmd, parameters, bltmdmap; kwargs...)
 end
 
 """

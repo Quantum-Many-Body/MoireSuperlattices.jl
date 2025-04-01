@@ -70,7 +70,7 @@ end
 
 @time @testset "BLTMD" begin
     parameters = (a₀=3.28, m=0.45, θ=3.70, Vᶻ=38.0, μ=0.0, V=-1.28, ψ=22.7, w=-12.9)
-    bltmd = Algorithm(:BLTMD, BLTMD(values(parameters)...; truncation=4); parameters=parameters, map=bltmdmap)
+    bltmd = Algorithm(:BLTMD, BLTMD(values(parameters)...; truncation=4), parameters)
     @test contentnames(typeof(bltmd.frontend)) == (:parameters, :reciprocallattice, :diagonal!, :system, :quadraticization, :H)
     @test Parameters(bltmd.frontend) == (a₀=3.28, m=0.45, θ=3.7, Vᶻ=38.0, μ=0.0, potentialᵣ=-1.1808487545039954, potentialᵢ=-0.4939597341751278, interlayer₁=-12.9, interlayer₂=-12.9, interlayer₃=-12.9)
     @test dimension(bltmd.frontend) == 122

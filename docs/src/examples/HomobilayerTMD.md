@@ -26,10 +26,7 @@ using TightBindingApproximation
 # `ψ`: phase of Moire potential (°)
 # `w`: interlayer hopping amplitude (meV)
 parameters = (a₀=3.28, m=0.45, θ=3.70, Vᶻ=0.0, μ=0.0, V=4.4, ψ=5.9, w=20.0)
-WSe₂ = Algorithm(
-    :WSe₂, BLTMD(values(parameters)...; truncation=4);
-    parameters=parameters, map=bltmdmap
-)
+WSe₂ = Algorithm(:WSe₂, BLTMD(values(parameters)...; truncation=4), parameters)
 recipls = WSe₂.frontend.reciprocallattice.translations
 bands₁ = WSe₂(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₁-M₁-Γ", length=100)))
 bands₂ = WSe₂(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₄-M₄-Γ", length=100)))
@@ -90,10 +87,7 @@ using QuantumLattices
 using TightBindingApproximation
 
 parameters = (a₀=3.52, m=0.6, θ=3.89, Vᶻ=0.0, μ=30.0, V=20.8, ψ=107.7, w=-23.8)
-MoTe₂ = Algorithm(
-    :MoTe₂, BLTMD(values(parameters)...; truncation=4);
-    parameters=parameters, map=bltmdmap
-)
+MoTe₂ = Algorithm(:MoTe₂, BLTMD(values(parameters)...; truncation=4), parameters)
 recipls = MoTe₂.frontend.reciprocallattice.translations
 bands = MoTe₂(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₁-M₁-Γ", length=100)))
 plot(bands, ylim=(-50.0, 10.0), color="blue", title="")
