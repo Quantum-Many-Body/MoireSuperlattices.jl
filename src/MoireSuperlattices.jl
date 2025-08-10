@@ -4,7 +4,7 @@ using LinearAlgebra: dot, eigvals, norm
 using Printf: @printf
 using QuantumLattices: annihilation, atol, creation, hexagon120°map, hexagon60°map, lazy, plain
 using QuantumLattices: AbstractLattice, Bond, BrillouinZone, CategorizedGenerator, CompositeIndex, Coupling, Hilbert, Hopping, Index, LaTeX, Lattice, Neighbors, Onsite, OperatorGenerator, OperatorIndexToTuple, OperatorSum, SimpleInternal, SimpleInternalIndex, Table, Term
-using QuantumLattices: azimuth, azimuthd, bonds, concatenate, distance, latexformat, reciprocals, rcoordinate, rotate, scalartype, tostr, update, 𝕔⁺𝕔, @σ_str
+using QuantumLattices: azimuth, azimuthd, bonds, concatenate, distance, latexformat, reciprocals, rcoordinate, rotate, scalartype, str, update, 𝕔⁺𝕔, @σ_str
 using RecipesBase: RecipesBase, @recipe, @series
 using StaticArrays: SVector
 using TightBindingApproximation: TBA, Fermionic, Quadratic, Quadraticization
@@ -105,7 +105,7 @@ Plot a Moire superlattice composed of two layers of honeycomb lattices in the re
     @assert choice∈(:real, :reciprocal) "plot error: incorrect choice (`:$choice`), which should be either `:real` or `:reciprocal`."
     θ = angle(moire)
     top, bottom, (t₁, t₂) = Lattice(moire, :top), Lattice(moire, :bottom), vectors(moire)
-    title --> "Twisted Bilayer Honeycomb ($(tostr(rad2deg(θ)))°)"
+    title --> "Twisted Bilayer Honeycomb ($(str(rad2deg(θ)))°)"
     aspect_ratio := :equal
     legend := false
     if choice == :real

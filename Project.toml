@@ -1,7 +1,7 @@
 name = "MoireSuperlattices"
 uuid = "e394c99e-e854-4268-9140-34fa518dd490"
 authors = ["waltergu <waltergu1989@gmail.com> and contributors"]
-version = "0.1.2"
+version = "0.1.3"
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -14,8 +14,8 @@ TightBindingApproximation = "d3576f78-cb9d-4774-9dc5-b247cf392ff4"
 [compat]
 LinearAlgebra = "1.10 - 1"
 Printf = "1.10 - 1"
-QuantumLattices = "0.12.0"
+QuantumLattices = "0.13.0"
 RecipesBase = "1.2 - 1"
 StaticArrays = "1.4 - 1"
-TightBindingApproximation = "0.3.0"
+TightBindingApproximation = "0.3.4"
 julia = "1.10 - 1.11"
