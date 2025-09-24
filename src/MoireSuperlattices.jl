@@ -2,14 +2,14 @@ module MoireSuperlattices
 
 using LinearAlgebra: dot, eigvals, norm
 using Printf: @printf
-using QuantumLattices: annihilation, atol, creation, hexagon120°map, hexagon60°map, lazy, plain
-using QuantumLattices: AbstractLattice, Bond, BrillouinZone, CategorizedGenerator, CompositeIndex, Coupling, Hilbert, Hopping, Index, LaTeX, Lattice, Neighbors, Onsite, OperatorGenerator, OperatorIndexToTuple, OperatorSum, SimpleInternal, SimpleInternalIndex, Table, Term
-using QuantumLattices: azimuth, azimuthd, bonds, concatenate, distance, latexformat, reciprocals, rcoordinate, rotate, scalartype, str, update, 𝕔⁺𝕔, @σ_str
+using QuantumLattices: σᶻ, annihilation, atol, creation, hexagon120°map, hexagon60°map, lazy, plain
+using QuantumLattices: AbstractLattice, Bond, BrillouinZone, CategorizedGenerator, CompositeIndex, Coupling, Hilbert, Hopping, Index, InternalIndex, LaTeX, Lattice, Neighbors, Onsite, OperatorGenerator, OperatorIndexToTuple, OperatorSum, SimpleInternal, Table, Term
+using QuantumLattices: azimuth, azimuthd, bonds, concatenate, distance, latexformat, reciprocals, rcoordinate, rotate, scalartype, str, update, 𝕔⁺𝕔
 using RecipesBase: RecipesBase, @recipe, @series
 using StaticArrays: SVector
 using TightBindingApproximation: TBA, Fermionic, Quadratic, Quadraticization
 
-import QuantumLattices: Algorithm, Parameters, allequalfields, contentnames, dimension, getcontent, indextype, isdefinite, latexname, matrix, patternrule, script, shape, statistics, update!
+import QuantumLattices: Algorithm, Parameters, contentnames, diagonalfields, dimension, getcontent, indextype, isdefinite, latexname, matrix, script, shape, statistics, update!
 
 export BLTMD, CommensurateBilayerHoneycomb, MoireReciprocalLattice, MoireSpace, MoireSpinor, MoireSuperlattice, MoireSystem, MoireTriangular, bltmd!, bltmdmap, coefficients, terms, truncation, vectors
 
@@ -232,11 +232,11 @@ function MoireTriangular(truncation::Int, vectors::AbstractVector{<:AbstractVect
 end
 
 """
-    MoireSpinor{V<:Union{Int, Colon}, L<:Union{Int, Colon}, S<:Union{Int, Colon}, P<:Union{Rational{Int}, Colon}, N<:Union{Int, Colon}} <: SimpleInternalIndex
+    MoireSpinor{V<:Union{Int, Colon}, L<:Union{Int, Colon}, S<:Union{Int, Colon}, P<:Union{Rational{Int}, Colon}, N<:Union{Int, Colon}} <: InternalIndex
 
 The index of the internal degrees of freedom of Moire systems.
 """
-struct MoireSpinor{V<:Union{Int, Colon}, L<:Union{Int, Colon}, S<:Union{Int, Colon}, P<:Union{Rational{Int}, Colon}, N<:Union{Int, Colon}} <: SimpleInternalIndex
+struct MoireSpinor{V<:Union{Int, Colon}, L<:Union{Int, Colon}, S<:Union{Int, Colon}, P<:Union{Rational{Int}, Colon}, N<:Union{Int, Colon}} <: InternalIndex
     valley::V
     layer::L
     sublattice::S
@@ -249,7 +249,7 @@ struct MoireSpinor{V<:Union{Int, Colon}, L<:Union{Int, Colon}, S<:Union{Int, Col
         new{typeof(valley), typeof(layer), typeof(sublattice), typeof(spin), typeof(nambu)}(valley, layer, sublattice, spin, nambu)
     end
 end
-# basic methods of concrete SimpleInternalIndex
+# basic methods of concrete InternalIndex
 @inline function Base.adjoint(spinor::MoireSpinor{<:Union{Int, Colon}, <:Union{Int, Colon}, <:Union{Int, Colon}, <:Union{Rational{Int}, Colon}, Int})
     return MoireSpinor(spinor.valley, spinor.layer, spinor.sublattice, spinor.spin, 3-spinor.nambu)
 end
@@ -261,15 +261,14 @@ end
 @inline default(value::Rational{Int}) = value.den==1 ? string(value.num) : string(value)
 @inline statistics(::Type{<:MoireSpinor}) = :f
 @inline isdefinite(::Type{MoireSpinor{Int, Int, Int, Rational{Int}, Int}}) = true
-# requested by InternalPattern
-@inline allequalfields(::Type{<:MoireSpinor}) = (:valley, :layer, :sublattice, :spin)
+# requested by Pattern
+@inline diagonalfields(::Type{<:MoireSpinor}) = (:valley, :layer, :sublattice, :spin)
 # requested by MatrixCoupling
 @inline function indextype(::Type{MoireSpinor}, ::Type{V}, ::Type{L}, ::Type{S}, ::Type{P}, ::Type{N}) where {V<:Union{Int, Colon}, L<:Union{Int, Colon}, S<:Union{Int, Colon}, P<:Union{Rational{Int}, Colon}, N<:Union{Int, Colon}}
     return MoireSpinor{V, L, S, P, N}
 end
 
 # patternrule
-@inline patternrule(::NTuple{N, Colon}, ::Val{}, ::Type{<:MoireSpinor}, ::Val{:nambu}) where N = ntuple(i->isodd(i) ? creation : annihilation, Val(N))
 @inline MoireSpinor{V, L, S, P, N}(valley, layer, sublattice, spin, nambu) where {V, L, S, P, N} = MoireSpinor(valley, layer, sublattice, spin, nambu)
 
 # LaTeX format output
@@ -380,12 +379,13 @@ Here, the parameters are as follows:
 * `w`: interlayer hopping amplitude (meV)
 """
 function BLTMD(a₀::Number, m::Number, θ::Number, Vᶻ::Number, μ::Number, V::Number, ψ::Number, w::Number; truncation::Int=4)
-    coupling = Coupling{2}(:, MoireSpinor, :, :, :, :, :)
-    coupling₁₁ = Coupling(:, MoireSpinor, :, (1, 1), :, :, :)
-    coupling₁₂ = Coupling(:, MoireSpinor, :, (1, 2), :, :, :)
-    coupling₂₁ = Coupling(:, MoireSpinor, :, (2, 1), :, :, :)
-    coupling₂₂ = Coupling(:, MoireSpinor, :, (2, 2), :, :, :)
-    coupling₀ = Coupling(0, :, MoireSpinor, :, (0, 0), :, :, :)
+    nambus = (creation, annihilation)
+    coupling = Coupling{MoireSpinor}(:, :, :, :, :, nambus)
+    coupling₁₁ = Coupling{MoireSpinor}(:, :, (1, 1), :, :, nambus)
+    coupling₁₂ = Coupling{MoireSpinor}(:, :, (1, 2), :, :, nambus)
+    coupling₂₁ = Coupling{MoireSpinor}(:, :, (2, 1), :, :, nambus)
+    coupling₂₂ = Coupling{MoireSpinor}(:, :, (2, 2), :, :, nambus)
+    coupling₀ = Coupling{MoireSpinor}(0, :, :, (0, 0), :, :, nambus)
     terms = (
         Term{:TMD}(:potentialᵣ, V*cosd(ψ), 1, coupling, false),
         Term{:TMD}(:potentialᵢ, V*sind(ψ), 1, bond::Bond->(sign=round(Int, real(exp(3im*azimuth(rcoordinate(bond)))))::Int; (-1im*sign*coupling₁₁, 1im*sign*coupling₂₂)), false),
@@ -477,7 +477,7 @@ function terms(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::BrillouinZ
         suffix = join('₀'+d for d in digits(order))
         return (
             Hopping(Symbol("t", suffix), real(values[1]), order; ismodulatable=ismodulatable),
-            Hopping(Symbol("λ", suffix), imag(values[1]), order, 𝕔⁺𝕔(:, :, σ"z", :); amplitude=amplitude, ismodulatable=ismodulatable)
+            Hopping(Symbol("λ", suffix), imag(values[1]), order, 𝕔⁺𝕔(:, :, σᶻ); amplitude=amplitude, ismodulatable=ismodulatable)
         )
     end
     μ = Onsite(:μ, Complex(μval))

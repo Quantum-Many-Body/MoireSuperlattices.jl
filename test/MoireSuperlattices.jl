@@ -44,9 +44,8 @@ end
     @test string(MoireSpinor(1, :, 1, 0//2, 2)) == "MoireSpinor(1, :, 1, 0, 2)"
     @test statistics(MoireSpinor(:, :, :, :, :)) == statistics(MoireSpinor) == :f
     @test !isdefinite(MoireSpinor(:, :, :, :, :)) && isdefinite(MoireSpinor(1, 1, 1, 1//2, 2))
-    @test allequalfields(MoireSpinor) == (:valley, :layer, :sublattice, :spin)
+    @test diagonalfields(MoireSpinor) == (:valley, :layer, :sublattice, :spin)
     @test indextype(MoireSpinor, Colon, Colon, Colon, Colon, Colon) == MoireSpinor{Colon, Colon, Colon, Colon, Colon}
-    @test patternrule((:, :, :, :), Val(:), MoireSpinor, Val(:nambu)) == (2, 1, 2, 1)
     @test MoireSpinor{Colon, Colon, Colon, Colon, Colon}(1, 1, 1, 1//2, 2) == MoireSpinor(1, 1, 1, 1//2, 2)
     @test script(MoireSpinor(1, 1, 1, 1//2, 2), Val(:valley))=="1" && script(MoireSpinor(:, 1, 1, 1//2, 2), Val(:valley))==":"
     @test script(MoireSpinor(1, 1, 1, 1//2, 2), Val(:layer))=="1" && script(MoireSpinor(1, :, 1, 1//2, 2), Val(:layer))==":"
