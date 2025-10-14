@@ -3,13 +3,13 @@ module MoireSuperlattices
 using LinearAlgebra: dot, eigvals, norm
 using Printf: @printf
 using QuantumLattices: σᶻ, annihilation, atol, creation, hexagon120°map, hexagon60°map, lazy, plain
-using QuantumLattices: AbstractLattice, Bond, BrillouinZone, CategorizedGenerator, CompositeIndex, Coupling, Hilbert, Hopping, Index, InternalIndex, LaTeX, Lattice, Neighbors, Onsite, OperatorGenerator, OperatorIndexToTuple, OperatorSum, SimpleInternal, Table, Term
+using QuantumLattices: AbstractLattice, Bond, BrillouinZone, CategorizedGenerator, CompositeIndex, Coupling, Hilbert, Hopping, Index, InternalIndex, LaTeX, Neighbors, Onsite, OperatorGenerator, OperatorIndexToTuple, OperatorSum, SimpleInternal, Table, Term
 using QuantumLattices: azimuth, azimuthd, bonds, concatenate, distance, latexformat, reciprocals, rcoordinate, rotate, scalartype, str, update, 𝕔⁺𝕔
 using RecipesBase: RecipesBase, @recipe, @series
 using StaticArrays: SVector
 using TightBindingApproximation: TBA, Fermionic, Quadratic, Quadraticization
 
-import QuantumLattices: Algorithm, Parameters, contentnames, diagonalfields, dimension, getcontent, indextype, isdefinite, latexname, matrix, script, shape, statistics, update!
+import QuantumLattices: Algorithm, Lattice, Parameters, contentnames, diagonalfields, dimension, getcontent, indextype, isdefinite, latexname, matrix, script, shape, statistics, update!
 
 export BLTMD, CommensurateBilayerHoneycomb, MoireReciprocalLattice, MoireSpace, MoireSpinor, MoireSuperlattice, MoireSystem, MoireTriangular, bltmd!, bltmdmap, coefficients, terms, truncation, vectors
 

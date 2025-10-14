@@ -1,6 +1,9 @@
 *.jl.*.cov
 *.jl.cov
 *.jl.mem
+Manifest.toml
 desktop.ini
 /docs/build/
+docs/Manifest.toml
 test/*.png
+test/Manifest.toml
