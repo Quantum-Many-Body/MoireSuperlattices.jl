@@ -42,19 +42,18 @@ end
     @test MoireSpinor(2, 1, 1, -1//2, 2)' == MoireSpinor(2, 1, 1, -1//2, 1)
     @test string(MoireSpinor(:, 1, 1, 1//2, 1)) == "MoireSpinor(:, 1, 1, 1//2, 1)"
     @test string(MoireSpinor(1, :, 1, 0//2, 2)) == "MoireSpinor(1, :, 1, 0, 2)"
-    @test statistics(MoireSpinor(:, :, :, :, :)) == statistics(MoireSpinor) == :f
-    @test !isdefinite(MoireSpinor(:, :, :, :, :)) && isdefinite(MoireSpinor(1, 1, 1, 1//2, 2))
-    @test diagonalfields(MoireSpinor) == (:valley, :layer, :sublattice, :spin)
-    @test indextype(MoireSpinor, Colon, Colon, Colon, Colon, Colon) == MoireSpinor{Colon, Colon, Colon, Colon, Colon}
-    @test MoireSpinor{Colon, Colon, Colon, Colon, Colon}(1, 1, 1, 1//2, 2) == MoireSpinor(1, 1, 1, 1//2, 2)
+    @test statistics(MoireSpinor(:, :, :, :, 1)) == statistics(MoireSpinor) == :f
+    @test !isdefinite(MoireSpinor(:, :, :, :, 1)) && isdefinite(MoireSpinor(1, 1, 1, 1//2, 2))
+    @test indextype(MoireSpinor, Colon, Colon, Colon, Colon) == MoireSpinor{Colon, Colon, Colon, Colon}
+    @test MoireSpinor{Colon, Colon, Colon, Colon}(1, 1, 1, 1//2, 2) == MoireSpinor(1, 1, 1, 1//2, 2)
     @test script(MoireSpinor(1, 1, 1, 1//2, 2), Val(:valley))=="1" && script(MoireSpinor(:, 1, 1, 1//2, 2), Val(:valley))==":"
     @test script(MoireSpinor(1, 1, 1, 1//2, 2), Val(:layer))=="1" && script(MoireSpinor(1, :, 1, 1//2, 2), Val(:layer))==":"
     @test script(MoireSpinor(1, 1, 1, 1//2, 2), Val(:sublattice))=="1" && script(MoireSpinor(1, 1, :, 1//2, 2), Val(:sublattice))==":"
     @test script(MoireSpinor(1, 1, 1, 1//2, 2), Val(:spin))=="↑" && script(MoireSpinor(1, 1, 1, -1//2, 2), Val(:spin))=="↓"
     @test script(MoireSpinor(1, 1, 1, 0, 2), Val(:spin))=="" && script(MoireSpinor(1, 1, 1, :, 2), Val(:spin))==":"
-    @test script(MoireSpinor(1, 1, 1, 0, 2), Val(:nambu))=="\\dagger" && script(MoireSpinor(1, 1, 1, 0, 1), Val(:nambu))=="" && script(MoireSpinor(1, 1, 1, 0, :), Val(:nambu))==":"
-    @test latexname(MoireSpinor{Colon, Colon, Colon, Colon, Colon}) == :MoireSpinor
-    @test latexname(Index{MoireSpinor{Colon, Colon, Colon, Colon, Colon}, Int}) == Symbol("Index{MoireSpinor}")
+    @test script(MoireSpinor(1, 1, 1, 0, 2), Val(:nambu))=="\\dagger" && script(MoireSpinor(1, 1, 1, 0, 1), Val(:nambu))==""
+    @test latexname(MoireSpinor{Colon, Colon, Colon, Colon}) == :MoireSpinor
+    @test latexname(Index{MoireSpinor{Colon, Colon, Colon, Colon}, Int}) == Symbol("Index{MoireSpinor}")
     @test latexname(CompositeIndex{<:Index{<:MoireSpinor}}) == Symbol("CompositeIndex{Index{MoireSpinor}}")
 
     moire = MoireSpace(2, 2, 2, 2)

@@ -9,7 +9,7 @@ using RecipesBase: RecipesBase, @recipe, @series
 using StaticArrays: SVector
 using TightBindingApproximation: TBA, Fermionic, Quadratic, Quadraticization
 
-import QuantumLattices: Algorithm, Lattice, Parameters, contentnames, diagonalfields, dimension, getcontent, indextype, isdefinite, latexname, matrix, script, shape, statistics, update!
+import QuantumLattices: Algorithm, Lattice, Parameters, contentnames, dimension, getcontent, indextype, isdefinite, latexname, matrix, script, shape, statistics, update!
 
 export BLTMD, CommensurateBilayerHoneycomb, MoireReciprocalLattice, MoireSpace, MoireSpinor, MoireSuperlattice, MoireSystem, MoireTriangular, bltmd!, bltmdmap, coefficients, terms, truncation, vectors
 
@@ -232,25 +232,25 @@ function MoireTriangular(truncation::Int, vectors::AbstractVector{<:AbstractVect
 end
 
 """
-    MoireSpinor{V<:Union{Int, Colon}, L<:Union{Int, Colon}, S<:Union{Int, Colon}, P<:Union{Rational{Int}, Colon}, N<:Union{Int, Colon}} <: InternalIndex
+    MoireSpinor{V<:Union{Int, Colon}, L<:Union{Int, Colon}, S<:Union{Int, Colon}, P<:Union{Rational{Int}, Colon}} <: InternalIndex
 
 The index of the internal degrees of freedom of Moire systems.
 """
-struct MoireSpinor{V<:Union{Int, Colon}, L<:Union{Int, Colon}, S<:Union{Int, Colon}, P<:Union{Rational{Int}, Colon}, N<:Union{Int, Colon}} <: InternalIndex
+struct MoireSpinor{V<:Union{Int, Colon}, L<:Union{Int, Colon}, S<:Union{Int, Colon}, P<:Union{Rational{Int}, Colon}} <: InternalIndex
     valley::V
     layer::L
     sublattice::S
     spin::P
-    nambu::N
-    function MoireSpinor(valley::Union{Int, Colon}, layer::Union{Int, Colon}, sublattice::Union{Int, Colon}, spin::Union{Rational{Int}, Int, Colon}, nambu::Union{Int, Colon})
+    nambu::Int
+    function MoireSpinor(valley::Union{Int, Colon}, layer::Union{Int, Colon}, sublattice::Union{Int, Colon}, spin::Union{Rational{Int}, Int, Colon}, nambu::Int)
         @assert spin∈(-1//2, 1//2, 0, :) "MoireSpinor error: incorrect spin ($spin)."
-        isa(nambu, Int) && @assert nambu∈(1, 2) "MoireSpinor error: wrong nambu ($nambu)."
+        @assert nambu∈(1, 2) "MoireSpinor error: wrong nambu ($nambu)."
         isa(spin, Int) && (spin = convert(Rational{Int}, spin))
-        new{typeof(valley), typeof(layer), typeof(sublattice), typeof(spin), typeof(nambu)}(valley, layer, sublattice, spin, nambu)
+        new{typeof(valley), typeof(layer), typeof(sublattice), typeof(spin)}(valley, layer, sublattice, spin, nambu)
     end
 end
 # basic methods of concrete InternalIndex
-@inline function Base.adjoint(spinor::MoireSpinor{<:Union{Int, Colon}, <:Union{Int, Colon}, <:Union{Int, Colon}, <:Union{Rational{Int}, Colon}, Int})
+@inline function Base.adjoint(spinor::MoireSpinor)
     return MoireSpinor(spinor.valley, spinor.layer, spinor.sublattice, spinor.spin, 3-spinor.nambu)
 end
 @inline function Base.show(io::IO, spinor::MoireSpinor)
@@ -260,33 +260,31 @@ end
 @inline default(value::Int) = string(value)
 @inline default(value::Rational{Int}) = value.den==1 ? string(value.num) : string(value)
 @inline statistics(::Type{<:MoireSpinor}) = :f
-@inline isdefinite(::Type{MoireSpinor{Int, Int, Int, Rational{Int}, Int}}) = true
-# requested by Pattern
-@inline diagonalfields(::Type{<:MoireSpinor}) = (:valley, :layer, :sublattice, :spin)
+@inline isdefinite(::Type{MoireSpinor{Int, Int, Int, Rational{Int}}}) = true
 # requested by MatrixCoupling
-@inline function indextype(::Type{MoireSpinor}, ::Type{V}, ::Type{L}, ::Type{S}, ::Type{P}, ::Type{N}) where {V<:Union{Int, Colon}, L<:Union{Int, Colon}, S<:Union{Int, Colon}, P<:Union{Rational{Int}, Colon}, N<:Union{Int, Colon}}
-    return MoireSpinor{V, L, S, P, N}
+@inline function indextype(::Type{MoireSpinor}, ::Type{V}, ::Type{L}, ::Type{S}, ::Type{P}) where {V<:Union{Int, Colon}, L<:Union{Int, Colon}, S<:Union{Int, Colon}, P<:Union{Rational{Int}, Colon}}
+    return MoireSpinor{V, L, S, P}
 end
 
 # patternrule
-@inline MoireSpinor{V, L, S, P, N}(valley, layer, sublattice, spin, nambu) where {V, L, S, P, N} = MoireSpinor(valley, layer, sublattice, spin, nambu)
+@inline MoireSpinor{V, L, S, P}(valley, layer, sublattice, spin, nambu) where {V, L, S, P} = MoireSpinor(valley, layer, sublattice, spin, nambu)
 
 # LaTeX format output
 @inline script(spinor::MoireSpinor, ::Val{:valley}; kwargs...) = spinor.valley==(:) ? ":" : string(spinor.valley)
 @inline script(spinor::MoireSpinor, ::Val{:layer}; kwargs...) = spinor.layer==(:) ? ":" : string(spinor.layer)
 @inline script(spinor::MoireSpinor, ::Val{:sublattice}; kwargs...) = spinor.sublattice==(:) ? ":" : string(spinor.sublattice)
 @inline script(spinor::MoireSpinor, ::Val{:spin}; kwargs...) = spinor.spin==(:) ? ":" : spinor.spin==0 ? "" : spinor.spin==1//2 ? "↑" : "↓"
-@inline script(spinor::MoireSpinor, ::Val{:nambu}; kwargs...) = spinor.nambu==(:) ? ":" : spinor.nambu==2 ? "\\dagger" : ""
+@inline script(spinor::MoireSpinor, ::Val{:nambu}; kwargs...) = spinor.nambu==2 ? "\\dagger" : ""
 @inline latexname(::Type{<:MoireSpinor}) = Symbol("MoireSpinor")
 @inline latexname(::Type{<:Index{<:MoireSpinor}}) = Symbol("Index{MoireSpinor}")
 @inline latexname(::Type{<:CompositeIndex{<:Index{<:MoireSpinor}}}) = Symbol("CompositeIndex{Index{MoireSpinor}}")
 
 """
-    MoireSpace <: SimpleInternal{MoireSpinor{Int, Int, Int, Rational{Int}, Int}}
+    MoireSpace <: SimpleInternal{MoireSpinor{Int, Int, Int, Rational{Int}}}
 
 The internal degrees of freedom of Moire systems.
 """
-struct MoireSpace <: SimpleInternal{MoireSpinor{Int, Int, Int, Rational{Int}, Int}}
+struct MoireSpace <: SimpleInternal{MoireSpinor{Int, Int, Int, Rational{Int}}}
     nvalley::Int
     nlayer::Int
     nsublattice::Int
@@ -296,7 +294,7 @@ end
 @inline Base.convert(::Type{<:CartesianIndex}, spinor::MoireSpinor, moire::MoireSpace) = CartesianIndex(spinor.valley, spinor.layer, spinor.sublattice, Int(spinor.spin+(moire.nspin-1)//2)+1, spinor.nambu)
 @inline Base.convert(::Type{<:MoireSpinor}, index::CartesianIndex{5}, moire::MoireSpace) = MoireSpinor(index[1], index[2], index[3], index[4]-1-(moire.nspin-1)//2, index[5])
 # requested by ConstrainedInternal
-@inline function shape(moire::MoireSpace, spinor::MoireSpinor{<:Union{Int, Colon}, <:Union{Int, Colon}, <:Union{Int, Colon}, <:Union{Rational{Int}, Colon}, Int})
+@inline function shape(moire::MoireSpace, spinor::MoireSpinor)
     valley = moireshape(spinor.valley, moire.nvalley)
     layer = moireshape(spinor.layer, moire.nlayer)
     sublattice = moireshape(spinor.sublattice, moire.nsublattice)
