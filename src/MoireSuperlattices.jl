@@ -250,25 +250,17 @@ struct MoireSpinor{V<:Union{Int, Colon}, L<:Union{Int, Colon}, S<:Union{Int, Col
     end
 end
 # basic methods of concrete InternalIndex
-@inline function Base.adjoint(spinor::MoireSpinor)
-    return MoireSpinor(spinor.valley, spinor.layer, spinor.sublattice, spinor.spin, 3-spinor.nambu)
-end
-@inline function Base.show(io::IO, spinor::MoireSpinor)
-    @printf io "MoireSpinor(%s)" join((spinor.valley|>default, spinor.layer|>default, spinor.sublattice|>default, spinor.spin|>default, spinor.nambu|>default), ", ")
-end
+@inline Base.adjoint(spinor::MoireSpinor) = MoireSpinor(spinor.valley, spinor.layer, spinor.sublattice, spinor.spin, 3-spinor.nambu)
+@inline statistics(::Type{<:MoireSpinor}) = :f
+@inline isdefinite(::Type{MoireSpinor{Int, Int, Int, Rational{Int}}}) = true
+@inline Base.show(io::IO, spinor::MoireSpinor) = @printf io "MoireSpinor(%s)" join((spinor.valley|>default, spinor.layer|>default, spinor.sublattice|>default, spinor.spin|>default, spinor.nambu|>default), ", ")
 @inline default(::Colon) = ":"
 @inline default(value::Int) = string(value)
 @inline default(value::Rational{Int}) = value.den==1 ? string(value.num) : string(value)
-@inline statistics(::Type{<:MoireSpinor}) = :f
-@inline isdefinite(::Type{MoireSpinor{Int, Int, Int, Rational{Int}}}) = true
 # requested by MatrixCoupling
-@inline function indextype(::Type{MoireSpinor}, ::Type{V}, ::Type{L}, ::Type{S}, ::Type{P}) where {V<:Union{Int, Colon}, L<:Union{Int, Colon}, S<:Union{Int, Colon}, P<:Union{Rational{Int}, Colon}}
-    return MoireSpinor{V, L, S, P}
-end
-
+@inline indextype(::Type{MoireSpinor}, ::Type{V}, ::Type{L}, ::Type{S}, ::Type{P}) where {V<:Union{Int, Colon}, L<:Union{Int, Colon}, S<:Union{Int, Colon}, P<:Union{Rational{Int}, Colon}} = MoireSpinor{V, L, S, P}
 # patternrule
 @inline MoireSpinor{V, L, S, P}(valley, layer, sublattice, spin, nambu) where {V, L, S, P} = MoireSpinor(valley, layer, sublattice, spin, nambu)
-
 # LaTeX format output
 @inline script(spinor::MoireSpinor, ::Val{:valley}; kwargs...) = spinor.valley==(:) ? ":" : string(spinor.valley)
 @inline script(spinor::MoireSpinor, ::Val{:layer}; kwargs...) = spinor.layer==(:) ? ":" : string(spinor.layer)
@@ -293,7 +285,7 @@ end
 @inline shape(moire::MoireSpace) = (1:moire.nvalley, 1:moire.nlayer, 1:moire.nsublattice, 1:moire.nspin, 1:2)
 @inline Base.convert(::Type{<:CartesianIndex}, spinor::MoireSpinor, moire::MoireSpace) = CartesianIndex(spinor.valley, spinor.layer, spinor.sublattice, Int(spinor.spin+(moire.nspin-1)//2)+1, spinor.nambu)
 @inline Base.convert(::Type{<:MoireSpinor}, index::CartesianIndex{5}, moire::MoireSpace) = MoireSpinor(index[1], index[2], index[3], index[4]-1-(moire.nspin-1)//2, index[5])
-# requested by ConstrainedInternal
+# requested by Coupling expansion
 @inline function shape(moire::MoireSpace, spinor::MoireSpinor)
     valley = moireshape(spinor.valley, moire.nvalley)
     layer = moireshape(spinor.layer, moire.nlayer)
