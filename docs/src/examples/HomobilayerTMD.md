@@ -8,7 +8,7 @@ For twisted homobilayer transition metal dichalcogenides, such as the twisted bi
 
 ## Trivial Band Topology
 
-The band topology of the moire bands depends on the aforementioned parameters. For a typical set of parameters [[Phys. Rev. Research 2, 033087 (2020)](https://journals.aps.org/prresearch/abstract/10.1103/PhysRevResearch.2.033087)] that may be related to twisted bilayer WSe₂, the topmost moire band is topologically trivial.
+The band topology of the Moire bands depends on the aforementioned parameters. For a typical set of parameters [[Phys. Rev. Research 2, 033087 (2020)](https://journals.aps.org/prresearch/abstract/10.1103/PhysRevResearch.2.033087)] that may be related to twisted bilayer WSe₂, the topmost Moire band is topologically trivial.
 
 First, we calculate the energy bands with such a set of parameters in both valleys:
 ```@example WSe₂
@@ -38,13 +38,13 @@ plot!(plt, bands₂, ylim=(emin, emax), color="blue", title="")
 ```
 The bands are two-fold degenerate due to the valley degrees of freedom. Note that due to the spin-valley lock in WSe₂, such a degeneracy can also be viewed as the spin degeneracy.
 
-Then we compute the Berry curvature and Chern number of the topmost moire band:
+Then we compute the Berry curvature and Chern number of the topmost Moire band:
 ```@example WSe₂
 berry = WSe₂(:BC, BerryCurvature(BrillouinZone(recipls, 48), [dimension(WSe₂)]))
 plot(berry)
 ```
 
-The perpendicular displacement field can induced a layer dependent potential, which will lead to the splitting of the two spins:
+The perpendicular displacement field can induce a layer dependent potential, which will lead to the splitting of the two spins:
 ```@example WSe₂
 update!(WSe₂; Vᶻ=8.0)
 bands₁ = WSe₂(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₁-M₁-Γ", length=100)))
@@ -55,7 +55,7 @@ plot!(plt, bands₁, ylim=(emin, emax), color="blue", title="")
 plot!(plt, bands₂, ylim=(emin, emax), color="blue", title="")
 ```
 
-For the topologically trivial topmost moire band, it forms a triangular lattice. The effective tight-binding model of this sole band can be obtained:
+For the topologically trivial topmost Moire band, it forms a triangular lattice. The effective tight-binding model of this sole band can be obtained:
 ```@example WSe₂
 lattice = MoireTriangular(6, reciprocals(recipls))
 hilbert = Hilbert(Fock{:f}(1, 2), length(lattice))
@@ -77,7 +77,7 @@ plot!(plt, bands₃, ylim=(emin, emax), color="red", lw=4, alpha=0.3, title="")
 
 ## Nontrivial Band Topology
 
-With another set of parameters [[Phys. Rev. Lett. 132, 036501 (2024)](https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.132.036501)] that was proposed to be suitable for twisted bilayer MoTe₂, the top two moire bands have opposite Chern numbers.
+With another set of parameters [[Phys. Rev. Lett. 132, 036501 (2024)](https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.132.036501)] that was proposed to be suitable for twisted bilayer MoTe₂, the top two Moire bands have opposite Chern numbers.
 
 First, we calculate the energy bands with such a set of parameters in a single valley:
 ```@example MoTe₂
@@ -93,7 +93,7 @@ bands = MoTe₂(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₁-M₁-Γ
 plot(bands, ylim=(-50.0, 10.0), color="blue", title="")
 ```
 
-Then we compute the Berry curvature and Chern numbers of the top two moire bands:
+Then we compute the Berry curvature and Chern numbers of the top two Moire bands:
 ```@example MoTe₂
 berry = MoTe₂(
     :BC, BerryCurvature(BrillouinZone(recipls, 48), [dimension(MoTe₂), dimension(MoTe₂)-1])

@@ -4,7 +4,7 @@ CurrentModule = MoireSuperlattices
 
 # Visualization of Moire Superlattices by Twist
 
-Here follows a quick view of the commensurate moire superlattices composed of twisted homobilayer graphene:
+Here follows a quick view of the commensurate Moire superlattices composed of twisted homobilayer graphene:
 
 ```@example visualization
 using MoireSuperlattices
@@ -19,7 +19,7 @@ end
 gif(anim; fps=1.5)
 ```
 
-The crystal structure of a commensurate moire superlattice composed of twisted homobilayer graphene is characterized by two coprime positive integers (m, r) [[Phys. Rev. B 86, 155449 (2012)](https://journals.aps.org/prb/abstract/10.1103/PhysRevB.86.155449)]. In general, we need to distinguish two cases, i.e., whether gcd(r, 3) is 1 or 3, where gcd denotes the greatest common divisor.
+The crystal structure of a commensurate Moire superlattice composed of twisted homobilayer graphene is characterized by two coprime positive integers (m, r) [[Phys. Rev. B 86, 155449 (2012)](https://journals.aps.org/prb/abstract/10.1103/PhysRevB.86.155449)]. In general, we need to distinguish two cases, i.e., whether gcd(r, 3) is 1 or 3, where gcd denotes the greatest common divisor.
 
 ### When gcd(r, 3) is 1
 For example, m=8, r=1:
