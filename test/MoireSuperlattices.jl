@@ -1,7 +1,7 @@
 using MoireSuperlattices
 using Plots
 using QuantumLattices
-using QuantumLattices: contentnames, getcontent, shape
+using QuantumLattices: contentnames, getcontent
 using TightBindingApproximation
 
 @time @testset "CommensurateBilayerHoneycomb" begin

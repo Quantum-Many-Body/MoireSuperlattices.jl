@@ -2,7 +2,7 @@ module MoireSuperlattices
 
 using LinearAlgebra: dot, eigvals, norm
 using Printf: @printf
-using QuantumLattices: σᶻ, annihilation, atol, creation, hexagon120°map, hexagon60°map, lazy, plain
+using QuantumLattices: annihilation, atol, creation, hexagon120°map, hexagon60°map, lazy, plain, σᶻ
 using QuantumLattices: AbstractLattice, Bond, BrillouinZone, CategorizedGenerator, CompositeIndex, Coupling, Hilbert, Hopping, Index, InternalIndex, LaTeX, Neighbors, Onsite, OperatorGenerator, OperatorIndexToTuple, OperatorSum, SimpleInternal, Table, Term
 using QuantumLattices: azimuth, azimuthd, bonds, concatenate, distance, latexformat, reciprocals, rcoordinate, rotate, scalartype, str, update, 𝕔⁺𝕔
 using StaticArrays: SVector
@@ -393,12 +393,12 @@ end
 end 
 
 """
-    terms(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd), ismodulatable::Bool=true, tol=tol) -> NTuple{2*truncation(lattice)+1, Term}
-    terms(bltmd::Algorithm{<:BLTMD}, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd.frontend), ismodulatable::Bool=true, tol=tol) -> NTuple{2*truncation(lattice)+1, Term}
+    terms(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd), ismodulatable::Bool=true, tol=atol) -> NTuple{2*truncation(lattice)+1, Term}
+    terms(bltmd::Algorithm{<:BLTMD}, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd.frontend), ismodulatable::Bool=true, tol=atol) -> NTuple{2*truncation(lattice)+1, Term}
 
 Get the hopping terms and chemical potential of a bilayer TMD on the emergent triangular lattice.
 """
-function terms(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd), ismodulatable::Bool=true, tol=tol)
+function terms(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd), ismodulatable::Bool=true, tol=atol)
     tvals, μval = coefficients(bltmd, lattice, brillouinzone; band=band)
     hoppings = map(NTuple{truncation(lattice), eltype(tvals)}(tvals), lattice.neighbors, ntuple(i->i, Val(truncation(lattice)))) do values, neighbor, order
         @assert all(value->isapprox(real(value), real(values[1]); atol=tol) && isapprox(abs(imag(value)), abs(imag(values[1])); atol=tol), values) "terms error: unexpected behavior."
@@ -421,7 +421,7 @@ function terms(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::BrillouinZ
     μ = Onsite(:μ, Complex(μval))
     return (concatenate(hoppings...)..., μ)
 end
-@inline function terms(bltmd::Algorithm{<:BLTMD}, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd.frontend), ismodulatable::Bool=true, tol=tol)
+@inline function terms(bltmd::Algorithm{<:BLTMD}, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd.frontend), ismodulatable::Bool=true, tol=atol)
     return terms(bltmd.frontend, lattice, brillouinzone; band=band, ismodulatable=ismodulatable, tol=tol)
 end
 

@@ -12,7 +12,7 @@
 
 ## Introduction
 
-This package aims at the *construction of Moire Superlattices, acquisition of their effective models, and investigation of their low-energy physics*, based on the [QuantumLattices](https://github.com/Quantum-Many-Body/QuantumLattices.jl) pack and the [TightBindingApproximation](https://github.com/Quantum-Many-Body/TightBindingApproximation.jl) pack.
+This package aims at the *construction of Moire Superlattices, acquisition of their effective models, and investigation of their low-energy physics*, based on the [QuantumLattices](https://github.com/Quantum-Many-Body/QuantumLattices.jl) package and the [TightBindingApproximation](https://github.com/Quantum-Many-Body/TightBindingApproximation.jl) package.
 
 ## Installation
 

@@ -1,7 +1,7 @@
 module MoireSuperlatticesPlotsExt
 
 using RecipesBase: @recipe, @series
-using MoireSuperlattices: CommensurateBilayerHoneycomb, Lattice, Neighbors, Bond, vectors, angle, distance, reciprocals, hexagon120°map, hexagon60°map, rcoordinate, str
+using MoireSuperlattices: Bond, CommensurateBilayerHoneycomb, Lattice, Neighbors, angle, distance, hexagon120°map, hexagon60°map, reciprocals, rcoordinate, str, vectors
 using QuantumLattices: bonds
 
 """
