@@ -22,12 +22,7 @@ function Makie.plot!(
         neighbors = Neighbors(1=>distance(moire.coordinates[:, 1], moire.coordinates[:, 2]))
         Makie.plot!(ax, Lattice(top, (2n, 2n); mode=:center), neighbors; title, color=topcolor, kwargs...)
         Makie.plot!(ax, Lattice(bottom, (2n, 2n); mode=:center), neighbors; title, color=bottomcolor, kwargs...)
-        if vector
-            Makie.arrows!(
-                ax, [moire.center[1], moire.center[1]], [moire.center[2], moire.center[2]], [t₁[1], t₂[1]], [t₁[2], t₂[2]];
-                color=vectorcolor, linewidth=2, arrowsize=0.2
-            )
-        end
+        vector && Makie.arrows2d!(ax, [moire.center[1], moire.center[1]], [moire.center[2], moire.center[2]], [t₁[1], t₂[1]], [t₁[2], t₂[2]]; color=vectorcolor)
     else
         recipls₁ = reciprocals(top)
         recipls₂ = reciprocals(bottom)
