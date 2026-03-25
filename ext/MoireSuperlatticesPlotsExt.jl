@@ -1,8 +1,8 @@
 module MoireSuperlatticesPlotsExt
 
 using RecipesBase: @recipe, @series
-using MoireSuperlattices: Bond, CommensurateBilayerHoneycomb, Lattice, Neighbors, angle, distance, hexagon120°map, hexagon60°map, reciprocals, rcoordinate, str, vectors
-using QuantumLattices: bonds
+using MoireSuperlattices: CommensurateBilayerHoneycomb, vectors
+using QuantumLattices: Bond, Lattice, Neighbors, distance, hexagon120°map, hexagon60°map, reciprocals, str
 
 """
     plot(moire::CommensurateBilayerHoneycomb, choice::Symbol, n=2*ceil(Int, √count(moire)); topcolor=:red, bottomcolor=:blue, vector=true, vectorcolor=:green, moirecolor=:black, anglecolor=:grey)

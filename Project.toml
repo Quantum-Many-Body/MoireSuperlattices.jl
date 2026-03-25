@@ -11,10 +11,12 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 TightBindingApproximation = "d3576f78-cb9d-4774-9dc5-b247cf392ff4"
 
 [weakdeps]
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
 
 [extensions]
 MoireSuperlatticesPlotsExt = ["RecipesBase"]
+MoireSuperlatticesMakieExt = ["Makie"]
 
 [compat]
 LinearAlgebra = "1.10 - 1"
