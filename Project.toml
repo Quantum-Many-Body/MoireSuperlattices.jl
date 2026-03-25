@@ -20,6 +20,7 @@ MoireSuperlatticesMakieExt = ["Makie"]
 
 [compat]
 LinearAlgebra = "1.10 - 1"
+Makie = "0.24"
 Printf = "1.10 - 1"
 QuantumLattices = "0.14.4"
 RecipesBase = "1.2 - 1"
