@@ -2,7 +2,7 @@ module MoireSuperlattices
 
 using LinearAlgebra: dot, eigvals, norm
 using Printf: @printf
-using QuantumLattices: annihilation, atol, creation, hexagon120°map, hexagon60°map, lazy, plain, σᶻ
+using QuantumLattices: annihilation, atol, creation, hexagon120°map, hexagon60°map, σᶻ
 using QuantumLattices: AbstractLattice, Bond, BrillouinZone, CategorizedGenerator, CompositeIndex, Coupling, Hilbert, Hopping, Index, InternalIndex, LaTeX, Neighbors, Onsite, OperatorGenerator, OperatorIndexToTuple, OperatorSum, SimpleInternal, Table, Term
 using QuantumLattices: azimuth, azimuthd, bonds, concatenate, distance, latexformat, reciprocals, rcoordinate, rotate, scalartype, str, update, 𝕔⁺𝕔
 using StaticArrays: SVector
@@ -333,7 +333,7 @@ function BLTMD(a₀::Number, m::Number, θ::Number, Vᶻ::Number, μ::Number, V:
     )
     reciprocallattice = MoireReciprocalLattice(truncation)
     hilbert = Hilbert(site=>MoireSpace(1, 2, 1, 1) for site=1:length(reciprocallattice))
-    system = OperatorGenerator(bonds(reciprocallattice, 1), hilbert, terms, plain, lazy; half=false)
+    system = OperatorGenerator(bonds(reciprocallattice, 1), hilbert, terms; half=false)
     table = Table(hilbert, OperatorIndexToTuple(:site, :layer))
     quadraticization = Quadraticization{Fermionic{:TBA}}(table)
     return BLTMD((a₀=a₀, m=m, θ=θ, Vᶻ=Vᶻ, μ=μ), reciprocallattice, bltmd!, system, quadraticization, quadraticization(system))
