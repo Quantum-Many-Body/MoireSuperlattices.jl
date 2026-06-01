@@ -28,19 +28,19 @@ using TightBindingApproximation
 end
 
 @time @testset "MoireReciprocalLattice" begin
-    lattice = MoireReciprocalLattice(4)
-    @test getcontent(lattice, :name) == :truncation
+    lattice = MoireTriangularReciprocal(4)
+    @test getcontent(lattice, :name) == :MoireTriangularReciprocal
     @test getcontent(lattice, :vectors) == []
     Plots.savefig(Plots.plot(lattice, 1), "Plots-moire-reciprocal-lattice.png")
     Makie.save("Makie-moire-reciprocal-lattice.png", Makie.plot(lattice, 1))
 end
 
 @time @testset "MoireTriangular" begin
-    lattice = MoireTriangular(6, [[1.0, 0.0], [0.5, √3/2]]; origin=[0.0, 0.0])
+    lattice = MoireTriangular(6)
     @test truncation(lattice) == truncation(typeof(lattice)) == 6
     @test lattice.coordinates == [0.0; 0.0;;]
-    @test lattice.vectors == [[1.0, 0.0], [0.5, √3/2]]
-    @test all(map(≈, lattice.neighbors, ([[0.5, √3/2]], [[0.0, √3]], [[1.0, √3]], [[0.5, 1.5√3], [-0.5, 1.5√3]], [[1.5, 1.5√3]], [[0.0, 2√3]])))
+    @test lattice.vectors ≈ reciprocals(reciprocals(C₆))
+    @test length(lattice.neighbors) == 6
 end
 
 @time @testset "MoireSpinor and MoireSpace" begin
@@ -82,7 +82,7 @@ end
 
     update!(bltmd; μ=8.31)
     recipls = bltmd.frontend.reciprocallattice.translations
-    lattice = MoireTriangular(6, reciprocals(recipls))
+    lattice = MoireTriangular(6)
     hilbert = Hilbert(Fock{:f}(1, 2), length(lattice))
     tba = Algorithm(:tba, TBA(lattice, hilbert, terms(bltmd, lattice, BrillouinZone(recipls, 24); tol=10^-6)))
     @test coefficients(bltmd, lattice, BrillouinZone(recipls, 24)) == coefficients(bltmd.frontend, lattice, BrillouinZone(recipls, 24))

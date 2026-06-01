@@ -152,7 +152,7 @@ function BLTMD(a₀::Number, m::Number, θ::Number, Vᶻ::Number, μ::Number, V:
         Term{:TMD}(:interlayer₂, w, 1, bond::Bond->(ϕ=azimuthd(rcoordinate(bond)); ϕ≈60 ? coupling₂₁ : ϕ≈240 ? coupling₁₂ : coupling₀), false),
         Term{:TMD}(:interlayer₃, w, 1, bond::Bond->(ϕ=azimuthd(rcoordinate(bond)); ϕ≈120 ? coupling₂₁ : ϕ≈300 ? coupling₁₂ : coupling₀), false),
     )
-    reciprocallattice = MoireReciprocalLattice(truncation)
+    reciprocallattice = MoireTriangularReciprocal(truncation)
     hilbert = Hilbert(site=>MoireSpace(1, 2, 1, 1) for site=1:length(reciprocallattice))
     system = OperatorGenerator(bonds(reciprocallattice, 1), hilbert, terms; half=false)
     table = Table(hilbert, OperatorIndexToTuple(:site, :layer))
@@ -188,12 +188,4 @@ Construct an `Algorithm` with a `BLTMD` as the frontend.
 """
 @inline function Algorithm(name::Symbol, bltmd::BLTMD, parameters::Parameters; kwargs...)
     return Algorithm(name, bltmd, parameters, bltmdmap; kwargs...)
-end
-
-# runtime initialization
-function __init__()
-    latexformat(MoireSpinor, LaTeX{(:nambu,), (:layer, :spin)}('c'))
-    latexformat(Index{<:MoireSpinor}, LaTeX{(:nambu,), (:site, :layer, :spin)}('c'))
-    latexformat(CompositeIndex{<:Index{<:MoireSpinor}}, LaTeX{(:nambu,), (:site, :layer, :spin)}('c'))
-    nothing
 end

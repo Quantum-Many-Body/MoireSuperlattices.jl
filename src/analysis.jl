@@ -7,12 +7,12 @@
 Get the coefficients of the hoppings and chemical potential of a bilayer TMD on the emergent triangular lattice.
 """
 function coefficients(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd))
-    hoppings, μ = [zeros(ComplexF64, length(neighbor)) for neighbor in lattice.neighbors], 0.0
+    hoppings, μ = [zeros(ComplexF64, length(shell)) for shell in lattice.neighbors.shells], 0.0
     for momentum in brillouinzone
         value = eigvals(bltmd, momentum)[band]/length(brillouinzone)
-        for i = 1:length(lattice.neighbors)
+        for i = 1:truncation(lattice.neighbors)
             for j = 1:length(lattice.neighbors[i])
-                hoppings[i][j] += exp(-1im*dot(momentum, lattice.neighbors[i][j]))*value
+                hoppings[i][j] += exp(-1im*dot(momentum, rcoordinate(lattice.neighbors[i][j])))*value
             end
         end
         μ += value
@@ -31,9 +31,10 @@ Get the hopping terms and chemical potential of a bilayer TMD on the emergent tr
 """
 function terms(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd), ismodulatable::Bool=true, tol=atol)
     tvals, μval = coefficients(bltmd, lattice, brillouinzone; band=band)
-    hoppings = map(NTuple{truncation(lattice), eltype(tvals)}(tvals), lattice.neighbors, ntuple(i->i, Val(truncation(lattice)))) do values, neighbor, order
+    neighbors = lattice.neighbors
+    hoppings = map(NTuple{truncation(lattice), eltype(tvals)}(tvals), neighbors.shells, ntuple(i->i, Val(truncation(lattice)))) do values, shell, order
         @assert all(value->isapprox(real(value), real(values[1]); atol=tol) && isapprox(abs(imag(value)), abs(imag(values[1])); atol=tol), values) "terms error: unexpected behavior."
-        θs = ntuple(i->azimuthd(neighbor[i]), length(neighbor))
+        θs = ntuple(i->azimuthd(rcoordinate(shell[i])), length(shell))
         signs = ntuple(i->isapprox(imag(values[i]), 0; atol=tol) ? 1 : round(Int, imag(values[1])/imag(values[i])), length(values))
         function amplitude(bond::Bond)
             θ = azimuthd(rcoordinate(bond))
