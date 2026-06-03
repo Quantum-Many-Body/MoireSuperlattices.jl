@@ -11,7 +11,7 @@ using TightBindingApproximation: TBA, Fermionic, Quadratic, Quadraticization
 
 import QuantumLattices: Algorithm, Lattice, Parameters, contentnames, dimension, getcontent, indextype, isdefinite, latexname, matrix, reciprocals, script, shape, statistics, update!
 
-export BLTMD, C6, C₆, CommensurateBilayerHoneycomb, BareCoulomb, CoulombIntegral, ImageCoulomb, MoireHoneycomb, MoireNeighbors, MoireReciprocalLattice, MoireSpace, MoireSpinor, MoireSuperlattice, MoireSystem, MoireTriangular, MoireTriangularReciprocal, MoireTriangularWannier, PointGroup, RealZone, TanhCoulomb, bltmd!, bltmdmap, coefficients, terms, truncation, vectors
+export BLTMD, C6, C₆, CommensurateBilayerHoneycomb, BareCoulomb, CoulombIntegral, HoppingIntegral, ImageCoulomb, MoireAmplitude, MoireHoneycomb, MoireNeighbors, MoireReciprocalLattice, MoireSpace, MoireSpinor, MoireSuperlattice, MoireSystem, MoireTriangular, MoireTriangularReciprocal, MoireWannier, PointGroup, RealZone, TanhCoulomb, bltmd!, bltmdmap, terms, truncation, vectors
 
 include("lattices.jl")
 include("systems.jl")

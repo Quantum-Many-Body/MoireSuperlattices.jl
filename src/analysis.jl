@@ -1,202 +1,293 @@
-#=== Wannier functions, integrals, and term construction for Moire systems ===#
-
 """
-    coefficients(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd)) -> Tuple{Vector{Vector{ComplexF64}}, Float64}
-    coefficients(bltmd::Algorithm{<:BLTMD}, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd.frontend)) -> Tuple{Vector{Vector{ComplexF64}}, Float64}
+    MoireWannier{L<:MoireSuperlattice, G<:MoireReciprocalLattice, B<:BrillouinZone}
 
-Get the coefficients of the hoppings and chemical potential of a bilayer TMD on the emergent triangular lattice.
-"""
-function coefficients(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd))
-    hoppings, μ = [zeros(ComplexF64, length(shell)) for shell in lattice.neighbors.shells], 0.0
-    for momentum in brillouinzone
-        value = eigvals(bltmd, momentum)[band]/length(brillouinzone)
-        for i = 1:truncation(lattice.neighbors)
-            for j = 1:length(lattice.neighbors[i])
-                hoppings[i][j] += exp(-1im*dot(momentum, rcoordinate(lattice.neighbors[i][j])))*value
-            end
-        end
-        μ += value
-    end
-    return hoppings, μ
-end
-@inline function coefficients(bltmd::Algorithm{<:BLTMD}, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd.frontend))
-    return coefficients(bltmd.frontend, lattice, brillouinzone; band=band)
-end
-
-"""
-    terms(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd), ismodulatable::Bool=true, tol=atol) -> NTuple{2*truncation(lattice)+1, Term}
-    terms(bltmd::Algorithm{<:BLTMD}, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd.frontend), ismodulatable::Bool=true, tol=atol) -> NTuple{2*truncation(lattice)+1, Term}
-
-Get the hopping terms and chemical potential of a bilayer TMD on the emergent triangular lattice.
-"""
-function terms(bltmd::BLTMD, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd), ismodulatable::Bool=true, tol=atol)
-    tvals, μval = coefficients(bltmd, lattice, brillouinzone; band=band)
-    neighbors = lattice.neighbors
-    hoppings = map(NTuple{truncation(lattice), eltype(tvals)}(tvals), neighbors.shells, ntuple(i->i, Val(truncation(lattice)))) do values, shell, order
-        @assert all(value->isapprox(real(value), real(values[1]); atol=tol) && isapprox(abs(imag(value)), abs(imag(values[1])); atol=tol), values) "terms error: unexpected behavior."
-        θs = ntuple(i->azimuthd(rcoordinate(shell[i])), length(shell))
-        signs = ntuple(i->isapprox(imag(values[i]), 0; atol=tol) ? 1 : round(Int, imag(values[1])/imag(values[i])), length(values))
-        function amplitude(bond::Bond)
-            θ = azimuthd(rcoordinate(bond))
-            for (sign, θ₀) in zip(signs, θs)
-                Δ = (θ-θ₀)/60
-                isapprox(round(Int, Δ), Δ; atol=tol) && return -1im*sign*cosd(3*(θ-θ₀))
-            end
-            error("amplitude error: mismatched bond.")
-        end
-        suffix = join('₀'+d for d in digits(order))
-        return (
-            Hopping(Symbol("t", suffix), real(values[1]), order; ismodulatable=ismodulatable),
-            Hopping(Symbol("λ", suffix), imag(values[1]), order, 𝕔⁺𝕔(:, :, σᶻ); amplitude=amplitude, ismodulatable=ismodulatable)
-        )
-    end
-    μ = Onsite(:μ, Complex(μval))
-    return (concatenate(hoppings...)..., μ)
-end
-@inline function terms(bltmd::Algorithm{<:BLTMD}, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(bltmd.frontend), ismodulatable::Bool=true, tol=atol)
-    return terms(bltmd.frontend, lattice, brillouinzone; band=band, ismodulatable=ismodulatable, tol=tol)
-end
-
-"""
-    MoireTriangularWannier{L<:MoireTriangular, G<:MoireReciprocalLattice, B<:BrillouinZone}
-
-Wannier function constructed on the emergent triangular lattice of a Moire system.
+Wannier function constructed on an emergent Moire superlattice.
 
 Fields:
 - `aₘ::Float64` — lattice constant of the moire superlattice
-- `lattice::L` — emergent triangular lattice (site positions and neighbor shells)
+- `lattice::L` — emergent superlattice (MoireTriangular or MoireHoneycomb)
 - `reciprocallattice::G` — truncated plane-wave basis (G-vectors) from the continuum model
 - `brillouinzone::B` — uniform k-point mesh over the moire Brillouin zone
-- `bloch::Matrix{ComplexF64}` — gauge-fixed Bloch eigenvectors, (D × N_k)
+- `energies::Matrix{Float64}` — raw band energies, (nband, nk)
+- `bloch::Array{ComplexF64, 4}` — raw Bloch eigenvectors, (nlayer, nG, nband, nk), pre-gauge
+- `U::Array{ComplexF64, 3}` — gauge transformation matrices, (nband, nband, nk)
 """
-struct MoireTriangularWannier{L<:MoireTriangular, G<:MoireReciprocalLattice, B<:BrillouinZone}
+struct MoireWannier{L<:MoireSuperlattice, G<:MoireReciprocalLattice, B<:BrillouinZone}
     aₘ::Float64
     lattice::L
     reciprocallattice::G
     brillouinzone::B
-    bloch::Matrix{ComplexF64}
+    energies::Matrix{Float64}
+    bloch::Array{ComplexF64, 4}
+    U::Array{ComplexF64, 3}
 end
 
+#=== triangular constructor (nband=1, U(1) gauge fix) ===#
 """
-    MoireTriangularWannier(moiresystem::MoireSystem, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(moiresystem))
+    MoireWannier(moiresystem::MoireSystem, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(moiresystem))
 
-Construct the Wannier function for band `band` of `moiresystem`, localized on the sites of the emergent `lattice`.
+Construct the Wannier function for a single band on a triangular lattice.
 
-Steps:
-1. Diagonalize the Hamiltonian at each k-point in `brillouinzone`.
-2. Gauge-fix: choose the phase so the bottom-layer component at r=0 is real and positive (Appendix A of PRR 2, 033087).
+Gauge fixing: U(1) phase such that the bottom-layer component at r=0 (MM site) is real and positive.
 """
-function MoireTriangularWannier(moiresystem::MoireSystem, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(moiresystem))
+function MoireWannier(moiresystem::MoireSystem, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(moiresystem))
     dim = dimension(moiresystem)
-    @assert 1 <= band <= dim "MoireTriangularWannier error: band index $band out of range [1, $dim]."
-    bloch = zeros(ComplexF64, dim, length(brillouinzone))
-    for (i, k) in enumerate(brillouinzone)
-        psi = eigvecs(moiresystem, k)[:, band]
-        bottom = zero(ComplexF64)
-        for j in 1:2:dim
-            bottom += psi[j]
+    @assert 1 <= band <= dim "MoireWannier error: band index $band out of range [1, $dim]."
+    nlayer, nband, nk = 2, 1, length(brillouinzone)
+    nG = dim ÷ nlayer
+    # extract band energies and Bloch states
+    energies = zeros(Float64, nband, nk)
+    bloch = zeros(ComplexF64, nlayer, nG, nband, nk)
+    for (ik, k) in enumerate(brillouinzone)
+        eigensystem = eigen(moiresystem, k)
+        energies[1, ik] = eigensystem.values[band]
+        bloch[:, :, 1, ik] = reshape(eigensystem.vectors[:, band], nlayer, nG)
+    end
+    # U(1) gauge fix: ψ_k(r_MM) real positive where r_MM = origin (0,0)
+    U = zeros(ComplexF64, nband, nband, nk)
+    for (ik, k) in enumerate(brillouinzone)
+        ψ_MM = zero(ComplexF64)
+        for ig in 1:nG
+            ψ_MM += bloch[1, ig, 1, ik]
         end
-        @assert abs(bottom) > atol "MoireTriangularWannier error: bottom-layer component at r=0 is zero at $k; gauge fixing failed."
-        phase = conj(bottom) / abs(bottom)
-        @views bloch[:, i] .= psi .* phase
+        @assert abs(ψ_MM) > atol "MoireWannier error: wavefunction at r=0 is zero at k=$k; gauge fixing failed."
+        U[1, 1, ik] = conj(ψ_MM) / abs(ψ_MM)
     end
     aₘ = moiresystem.parameters.a₀ / (2sind(moiresystem.parameters.θ/2))
     reciprocallattice = getcontent(moiresystem, :reciprocallattice)
-    return MoireTriangularWannier(aₘ, lattice, reciprocallattice, brillouinzone, bloch)
+    return MoireWannier(aₘ, lattice, reciprocallattice, brillouinzone, energies, bloch, U)
 end
 
-"""
-    (wannier::MoireTriangularWannier)(r::AbstractVector{<:Number}) -> SVector{2, ComplexF64}
+# === honeycomb constructor (nband=2, SU(2) + U(1) gauge fix) ===#
+# """
+#     MoireWannier(moiresystem::MoireSystem, lattice::MoireHoneycomb, brillouinzone::BrillouinZone; bands::UnitRange{Int})
 
-Evaluate the Wannier function at real-space position `r`: W(r) = (1/√N) Σ_k ψ_k(r),  ψ_k(r) = (1/√NΩ) Σ_G c_{k,G} e^{i(k+G)·r}
+# Construct Wannier functions for a 2-band subspace on a honeycomb lattice.
 
-Returns a 2-component layer-pseudospin spinor [W_b(r), W_t(r)].
+# Steps:
+# 1. Extract raw Bloch states for the 2-band subspace
+# 2. SU(2) rotation: maximize layer polarization via diagonalizing layer projectors
+# 3. U(1) gauge fix: ψ̃₁(r_MX) real positive, ψ̃₂(r_XM) real positive
+# """
+# function MoireWannier(moiresystem::MoireSystem, lattice::MoireHoneycomb, brillouinzone::BrillouinZone; bands::UnitRange{Int})
+#     dim = dimension(moiresystem)
+#     nband = length(bands)
+#     @assert nband == 2 "MoireWannier error: honeycomb requires exactly 2 bands, got $nband."
+#     @assert all(b -> 1 <= b <= dim, bands) "MoireWannier error: band indices out of range [1, $dim]."
+#     nk = length(brillouinzone)
+#     nlayer = 2
+#     nG = dim ÷ nlayer
+#     # extract raw Bloch states and energies
+#     bloch = zeros(ComplexF64, nlayer, nG, nband, nk)
+#     energies = zeros(Float64, nband, nk)
+#     band_indices = collect(bands)
+#     for (ik, k) in enumerate(brillouinzone)
+#         eigensystem = eigen(moiresystem, k)
+#         for (ib, b) in enumerate(band_indices)
+#             energies[ib, ik] = eigensystem.values[b]
+#             bloch[:, :, ib, ik] .= reshape(eigensystem.vectors[:, b], nlayer, nG)
+#         end
+#     end
+#     # SU(2) rotation to maximize layer polarization
+#     U_tilde = zeros(ComplexF64, nband, nband, nk)
+#     _su2_layer_polarization!(U_tilde, bloch, nG, nlayer, nk)
+#     # U(1) gauge fix:
+#     # ψ̃₁ at r_MX (MX position, sublattice 1) → real positive
+#     # ψ̃₂ at r_XM (XM position, sublattice 2) → real positive
+#     # MX = coordinates[:, 1], XM = coordinates[:, 2] in the honeycomb lattice
+#     r_MX = SVector(lattice.coordinates[1, 1], lattice.coordinates[2, 1])
+#     r_XM = SVector(lattice.coordinates[1, 2], lattice.coordinates[2, 2])
+#     U = zeros(ComplexF64, nband, nband, nk)
+#     for ik in 1:nk
+#         k = SVector(brillouinzone[ik][1], brillouinzone[ik][2])
+#         psi1_MX = zero(ComplexF64)
+#         psi2_XM = zero(ComplexF64)
+#         for ig in 1:nG
+#             Gvec = SVector(moiresystem.reciprocallattice[ig][1], moiresystem.reciprocallattice[ig][2])
+#             phase_MX = cis(dot(k + Gvec, r_MX))
+#             phase_XM = cis(dot(k + Gvec, r_XM))
+#             for il in 1:nlayer
+#                 for ν in 1:nband
+#                     psi1_MX += bloch[il, ig, ν, ik] * U_tilde[ν, 1, ik] * phase_MX
+#                     psi2_XM += bloch[il, ig, ν, ik] * U_tilde[ν, 2, ik] * phase_XM
+#                 end
+#             end
+#         end
+#         @assert abs(psi1_MX) > atol "MoireWannier error: ψ̃₁(r_MX) is zero at k=$k; gauge fixing failed."
+#         @assert abs(psi2_XM) > atol "MoireWannier error: ψ̃₂(r_XM) is zero at k=$k; gauge fixing failed."
+#         phi1 = conj(psi1_MX) / abs(psi1_MX)
+#         phi2 = conj(psi2_XM) / abs(psi2_XM)
+#         # U(k) = Ũ(k) × diag(e^{iφ₁k}, e^{iφ₂k})
+#         # U[:, n, ik] = U_tilde[:, n, ik] * exp(-i*phi_n)  for each column n
+#         U[:, 1, ik] .= U_tilde[:, 1, ik] .* phi1
+#         U[:, 2, ik] .= U_tilde[:, 2, ik] .* phi2
+#     end
+#     aₘ = moiresystem.parameters.a₀ / (2sind(moiresystem.parameters.θ/2))
+#     reciprocallattice = getcontent(moiresystem, :reciprocallattice)
+#     return MoireWannier(aₘ, lattice, reciprocallattice, brillouinzone, energies, bloch, U)
+# end
+
+# """
+#     _su2_layer_polarization!(U_tilde, bloch, nG, nlayer, nk)
+
+# Compute the SU(2) rotation Ũ(k) at each k that maximizes layer polarization:
+# - Column 1: maximize bottom-layer projection ⟨P_b⟩
+# - Column 2: maximize top-layer projection  ⟨P_t⟩
+
+# P_b = diag(1, 0), P_t = diag(0, 1) acting on the layer index.
+# """
+# function _su2_layer_polarization!(U_tilde::Array{ComplexF64,3}, bloch::Array{ComplexF64,4}, nG::Int, nlayer::Int, nk::Int)
+#     @assert nlayer == 2 "SU(2) layer polarization requires 2 layers."
+#     for ik in 1:nk
+#         Pb = zeros(ComplexF64, 2, 2)
+#         for ig in 1:nG
+#             # bottom-layer component (layer=1) at G-vector ig
+#             for μ in 1:2, ν in 1:2
+#                 Pb[μ, ν] += bloch[1, ig, μ, ik] * conj(bloch[1, ig, ν, ik])
+#             end
+#         end
+#         # diagonalize Pb (2×2 Hermitian)
+#         vals, vecs = eigen(Hermitian(Pb))
+#         # sort: eigenvector for max eigenvalue → column 1 (maximizes bottom-layer weight)
+#         #        eigenvector for min eigenvalue → column 2 (maximizes top-layer weight, since Pb + Pt ≈ I)
+#         perm = sortperm(vals; rev=true)
+#         U_tilde[:, :, ik] .= vecs[:, perm]
+#     end
+#     return U_tilde
+# end
+
 """
-function (wannier::MoireTriangularWannier)(r::AbstractVector{<:Number})
-    dim, nₖ = size(wannier.bloch)
-    nblock = dim ÷ length(wannier.reciprocallattice)
-    @assert nblock == 2 "MoireTriangularWannier error: only 2-layer systems supported (got nblock=$nblock)."
-    result = SVector(ComplexF64(0.0), ComplexF64(0.0))
-    for (i, momentum) in enumerate(wannier.brillouinzone)
-        k = SVector(momentum[1], momentum[2])
-        for (j, G) in enumerate(wannier.reciprocallattice)
-            phase = cis(dot(k + G, r))
-            bot = nblock * (j - 1) + 1  # bottom-layer index within block
-            top = nblock * (j - 1) + 2  # top-layer index within block
-            result += SVector(wannier.bloch[bot, i], wannier.bloch[top, i]) * phase
+    (wannier::MoireWannier)(r::AbstractVector{<:Number}, sublattice::Int=1) -> Vector{ComplexF64}
+
+Evaluate the Wannier function at real-space position `r` for a given sublattice.
+
+Formula: Wₙˡ(r) = (1/N√Ω) Σ_{k, G, ν} bloch_{G, l, ν}(k) · U_{ν, n}(k) · e^{i(k+G)·r},
+where N is the number of k-points and Ω is the volume of the unit cell in the real space.
+"""
+function (wannier::MoireWannier)(r::AbstractVector{<:Number}, sublattice::Int=1)
+    nlayer, _, nband, nk = size(wannier.bloch)
+    @assert 1 <= sublattice <= nband "MoireWannier error: sublattice $sublattice out of range [1, $nband]."
+    result = zeros(ComplexF64, nlayer)
+    for (ik, k) in enumerate(wannier.brillouinzone), (ig, G) in enumerate(wannier.reciprocallattice)
+        phase = cis(dot(k + G, r))
+        for ib in 1:nband, il in 1:nlayer
+            result[il] += wannier.bloch[il, ig, ib, ik] * wannier.U[ib, sublattice, ik] * phase
         end
     end
     Ω = volume(wannier.lattice.vectors)
-    return result / (sqrt(Ω) * nₖ)
+    return broadcast!(/, result, result, sqrt(Ω)*nk)
 end
 
 """
-    CoulombIntegral{W<:MoireTriangularWannier}
+    HoppingIntegral{W<:MoireWannier}
 
-Precomputed Coulomb form factor |M(q)|² for a triangular-lattice Wannier function.
+Hopping amplitude calculator for a Wannier function.
+
+Fields:
+- `wannier::W` — reference to the MoireWannier
+
+Callable as `(hopping::HoppingIntegral)(R::AbstractVector{<:Number}) -> Matrix{ComplexF64}`:
+
+```math
+t_{mn}(R) = (1/N) Σ_k exp(-ik·R) [U(k) diag(ε(k)) U†(k)]_{mn}
+```
+"""
+struct HoppingIntegral{W<:MoireWannier}
+    wannier::W
+end
+function (hopping::HoppingIntegral)(R::AbstractVector{<:Number})
+    nband, nk = size(hopping.wannier.energies)
+    result = zeros(ComplexF64, nband, nband)
+    for (ik, k) in enumerate(hopping.wannier.brillouinzone)
+        phase = exp(-1im * dot(k, R))
+        U = hopping.wannier.U[:, :, ik]
+        ε = hopping.wannier.energies[:, ik]
+        for m in 1:nband, n in 1:nband
+            acc = zero(ComplexF64)
+            for i in 1:nband
+                acc += U[m, i] * ε[i] * conj(U[n, i])
+            end
+            result[m, n] += phase * acc
+        end
+    end
+    return broadcast!(/, result, result, nk)
+end
+
+"""
+    CoulombIntegral{W<:MoireWannier}
+
+Precomputed Coulomb form factor for a Wannier function.
 
 Fields:
 - `wannier::W` — reference to the Wannier function
 - `qs::Vector{SVector{2,Float64}}` — unique q-vectors from the pairwise convolution
-- `formfactor::Vector{Float64}` — |M(q)|² at each q-point
+- `formfactor::Vector{Matrix{ComplexF64}}` — M(q)†M(q) / Nₖ² matrices at each q, (nband×nband)
 """
-struct CoulombIntegral{W<:MoireTriangularWannier}
+struct CoulombIntegral{W<:MoireWannier}
     wannier::W
     qs::Vector{SVector{2,Float64}}
-    formfactor::Vector{Float64}
+    formfactor::Vector{Matrix{ComplexF64}}
 end
 
 """
-    CoulombIntegral(wannier::MoireTriangularWannier)
+    CoulombIntegral(wannier::MoireWannier)
 
 Construct by computing the form factor M(q) from Bloch coefficients via pairwise convolution.
 
-Algorithm: collect all extended momenta p = k+G with their Bloch coefficients,
-then for each pair (p, p'), accumulate dot(c(p), c(p')) into M(q = p-p'). Normalized by N_k at extraction.
+Algorithm: compute gauge-transformed Bloch coefficients c_n(p) for each Wannier function n at
+extended momenta p=k+G, then for each pair (n,m) accumulate M_{m,n}(q) = Σ_p dot(c_n(p+q), c_m(p)).
 The q-mesh emerges naturally from the G/G' truncation.
 """
-function CoulombIntegral(wannier::MoireTriangularWannier)
-    dim, nk = size(wannier.bloch)
-    nG = length(wannier.reciprocallattice)
-    nblock = dim ÷ nG
-    @assert nblock == 2 "CoulombIntegral error: only 2-layer systems supported (got nblock=$nblock)."
+function CoulombIntegral(wannier::MoireWannier)
+    nlayer, nG, nband, nk = size(wannier.bloch)
     b₁, b₂ = wannier.reciprocallattice.translations
     N₁, N₂ = periods(wannier.brillouinzone)
-    # Decompose each k-point and G-vector into integer coordinates in the (b₁, b₂) basis
-    ks = Vector{Tuple{Int,Int}}(undef, nk)
-    for (i, k) in enumerate(wannier.brillouinzone)
+    # integer coordinates for k-points
+    ks = Vector{Tuple{Int, Int}}(undef, nk)
+    for (ik, k) in enumerate(wannier.brillouinzone)
         f₁, f₂ = decompose(k, b₁, b₂)
-        ks[i] = (round(Int, f₁*N₁), round(Int, f₂*N₂))
+        ks[ik] = (round(Int, f₁*N₁), round(Int, f₂*N₂))
     end
-    Gs = Vector{Tuple{Int,Int}}(undef, nG)
-    for (i, G) in enumerate(wannier.reciprocallattice)
+    # integer coordinates for G-vectors
+    Gs = Vector{Tuple{Int, Int}}(undef, nG)
+    for (ig, G) in enumerate(wannier.reciprocallattice)
         g₁, g₂ = decompose(G, b₁, b₂)
-        Gs[i] = (round(Int, g₁), round(Int, g₂))
+        Gs[ig] = (round(Int, g₁), round(Int, g₂))
     end
-    # Pairwise convolution, accumulated into integer-keyed dict
-    data = Vector{Tuple{Int, Int, SVector{2, ComplexF64}}}(undef, nk * nG)
-    idx = 1
-    for (ik, (k₁, k₂)) in enumerate(ks)
-        for (ig, (g₁, g₂)) in enumerate(Gs)
-            p₁ = k₁ + N₁*g₁
-            p₂ = k₂ + N₂*g₂
-            c₁ = wannier.bloch[nblock*(ig-1)+1, ik]
-            c₂ = wannier.bloch[nblock*(ig-1)+2, ik]
-            data[idx] = (p₁, p₂, SVector(c₁, c₂))
-            idx += 1
+    # extended momentum integer coordinates: p = k + G
+    ps = Matrix{Tuple{Int,Int}}(undef, nk, nG)
+    for (ik, (k₁, k₂)) in enumerate(ks), (ig, (g₁, g₂)) in enumerate(Gs)
+        ps[ik, ig] = (k₁ + N₁*g₁, k₂ + N₂*g₂)
+    end
+    # gauge-transformed coefficients: coeff[il, ig, iw, ik], same shape as bloch
+    coeff = zeros(ComplexF64, nlayer, nG, nband, nk)
+    for ik in 1:nk, iw in 1:nband, ib in 1:nband, ig in 1:nG, il in 1:nlayer
+        coeff[il, ig, iw, ik] += wannier.bloch[il, ig, ib, ik] * wannier.U[ib, iw, ik]
+    end
+    # pairwise convolution: M_n(q) = Σ_p dot(coeff_n(p+q), coeff_n(p))
+    Ms = Dict{Tuple{Int,Int}, Vector{ComplexF64}}()
+    for ik₁ in 1:nk, ig₁ in 1:nG
+        p₁ = ps[ik₁, ig₁]
+        for ik₂ in 1:nk, ig₂ in 1:nG
+            p₂ = ps[ik₂, ig₂]
+            M = get!(Ms, (p₂[1]-p₁[1], p₂[2]-p₁[2])) do
+                zeros(ComplexF64, nband)
+            end
+            for n in 1:nband, il in 1:nlayer
+                M[n] += conj(coeff[il, ig₂, n, ik₂]) * coeff[il, ig₁, n, ik₁]
+            end
         end
     end
-    Ms = Dict{Tuple{Int,Int}, ComplexF64}()
-    for (p₁, p₂, coeff) in data, (p₁′, p₂′, coeff′) in data
-        q = (p₁′ - p₁, p₂′ - p₂)
-        Ms[q] = get(Ms, q, zero(ComplexF64)) + dot(coeff, coeff′)
-    end
-    # Extract qs and |M(q)|²
-    qs = SVector{2, Float64}[]
-    formfactor = Float64[]
-    for ((q₁, q₂), M) in Ms
-        push!(qs, (q₁/N₁)*b₁ + (q₂/N₂)*b₂)
-        push!(formfactor, abs2(M/nk))
+    # formfactor: M*_m(q) M_n(q) / nk² at each q (outer product of M(q) with its conjugate)
+    qs = Vector{SVector{2, Float64}}(undef, length(Ms))
+    formfactor = Vector{Matrix{ComplexF64}}(undef, length(Ms))
+    for (i, ((q₁, q₂), M)) in enumerate(Ms)
+        qs[i] = (q₁/N₁)*b₁ + (q₂/N₂)*b₂
+        m′m = zeros(ComplexF64, nband, nband)
+        for m in 1:nband, n in 1:nband
+            m′m[m, n] = conj(M[m]) * M[n] / nk^2
+        end
+        formfactor[i] = m′m
     end
     return CoulombIntegral(wannier, qs, formfactor)
 end
@@ -247,20 +338,139 @@ function (v::TanhCoulomb)(q::Real, aₘ::Real)
 end
 
 """
-    (c::CoulombIntegral)(R::AbstractVector{<:Number}, V=BareCoulomb(1.0)) -> Float64
+    (c::CoulombIntegral)(R::AbstractVector{<:Number}, V=BareCoulomb(1.0))
 
 Compute U(R) = (1/(N_k Ω)) Σ_q V(|q|, aₘ) |M(q)|² e^{iq·R} in meV.
 
 `V` is a callable `V(q::Real, aₘ::Real) -> Real`, e.g. `BareCoulomb(ϵ)`, `ImageCoulomb(ϵ, d)`, `TanhCoulomb(ϵ, d)`, or a user-defined function. Defaults to `BareCoulomb(1.0)` (unscreened, ε=1).
+
+Returns an nband×nband `Matrix{Float64}` Coulomb interaction matrix.
 """
 function (c::CoulombIntegral)(R::AbstractVector{<:Number}, V=BareCoulomb(1.0))
     nk = length(c.wannier.brillouinzone)
     Ω = volume(c.wannier.lattice.vectors)
-    aₘ = c.wannier.aₘ
-    U = 0.0
-    for (q, m²) in zip(c.qs, c.formfactor)
-        Vq = V(norm(q), aₘ)
-        U += Vq * m² * cos(dot(q, R))
+    nband = size(c.wannier.energies, 1)
+    result = zeros(Float64, nband, nband)
+    for (q, m′m) in zip(c.qs, c.formfactor)
+        Vq = V(norm(q), c.wannier.aₘ) * cos(dot(q, R))
+        for i in eachindex(result, m′m)
+            result[i] += Vq * real(m′m[i])
+        end
     end
-    return U / (nk * Ω)
+    return broadcast!(/, result, result, nk*Ω)
+end
+
+#=== Hopping and Coulomb terms from Wannier integrals ===#
+
+"""
+    MoireAmplitude{N, G<:PointGroup}
+
+SOC hopping amplitude for Moiré superlattices under point group `G`.
+
+Fields:
+- `signs::NTuple{N, Int}` — relative polarities between symmetry-inequivalent stars within a shell
+- `θs::NTuple{N, Float64}` — reference azimuthal angles of each star (°)
+- `ℓ::Int` — angular momentum channel (3 for Moiré C₆ systems)
+
+When called with a [`Bond`](@ref), matches its azimuth to the correct star and returns
+`-1im * sign * cosd(ℓ * Δθ)` where Δθ is the angular deviation from the reference.
+"""
+struct MoireAmplitude{G<:PointGroup, N} <: Function
+    signs::NTuple{N, Int}
+    θs::NTuple{N, Float64}
+    ℓ::Int
+    function MoireAmplitude{G}(λs::AbstractVector{<:Real}, shell::AbstractVector{<:Bond}; ℓ::Int=3, atol::Real=atol) where G<:PointGroup
+        N = length(λs)
+        signs = ntuple(b -> isapprox(λs[b], 0; atol=atol) ? 1 : round(Int, λs[1]/λs[b]), N)
+        θs = ntuple(i -> azimuthd(rcoordinate(shell[i])), N)
+        return new{G, N}(signs, θs, ℓ)
+    end
+end
+
+function (amp::MoireAmplitude{G})(bond::Bond) where G<:PointGroup
+    αd = rad2deg(angle(G))
+    θ = azimuthd(rcoordinate(bond))
+    for (sign, θ₀) in zip(amp.signs, amp.θs)
+        Δ = (θ - θ₀) / αd
+        isapprox(round(Int, Δ), Δ; atol=atol) || continue
+        return -1im * sign * cosd(amp.ℓ * (θ - θ₀))
+    end
+    error("amplitude error: mismatched bond.")
+end
+
+"""
+    terms(h::HoppingIntegral; order::Int=truncation(h.wannier.lattice), ismodulatable::Bool=true, tol=atol) -> NTuple{...}, Term}
+
+Generate hopping terms from a [`HoppingIntegral`](@ref) for any Moiré superlattice.
+
+For each neighbor shell, collects the nband×nband hopping matrices for symmetry-inequivalent
+bonds, decomposes each matrix element ``(i,j)`` into spin-independent (real part) and SOC
+(imaginary part) components, and generates corresponding [`Hopping`](@ref) terms.
+
+For triangular lattices (nband=1), each shell produces 2 terms (spin-independent + SOC).
+For multi-band lattices (nband>1), terms are generated per sublattice pair with subscripted
+names (e.g., `t₁₁₂` for shell 1, sublattice pair (1,2)).
+"""
+function terms(h::HoppingIntegral; order::Int=truncation(h.wannier.lattice), ismodulatable::Bool=true, tol=atol)
+    lattice = h.wannier.lattice
+    nband = size(h.wannier.energies, 1)
+    G = typeof(PointGroup(lattice))
+    # collect hopping matrices and validate symmetry per shell
+    shells = Vector{Tuple{Int, Vector{Bond}, Vector{Any}}}(undef, order)
+    for k in 1:order
+        shell = lattice.neighbors[k]
+        nstar = length(shell)
+        hmats = [h(icoordinate(bond)) for bond in shell]
+        elements = Vector{Any}()
+        for i in 1:nband, j in 1:nband
+            ts = [real(hmats[b][i,j]) for b in 1:nstar]
+            λs = [imag(hmats[b][i,j]) for b in 1:nstar]
+            # skip zero element
+            all(t -> isapprox(t, 0; atol=tol), ts) && all(λ -> isapprox(λ, 0; atol=tol), λs) && continue
+            # assert |t| and |λ| are the same magnitude across all stars
+            tref, λref = abs(ts[1]), abs(λs[1])
+            @assert all(b -> isapprox(abs(ts[b]), tref; atol=tol), 1:nstar) "terms error: |t| mismatch for ($i,$j) in shell $k."
+            @assert all(b -> isapprox(abs(λs[b]), λref; atol=tol), 1:nstar) "terms error: |λ| mismatch for ($i,$j) in shell $k."
+            # name suffix
+            suffix_str = join('₀'+d for d in digits(k))
+            if nband > 1
+                suffix_str *= string(Char(0x2080+i), Char(0x2080+j))
+            end
+            push!(elements, (ts=ts, λs=λs, suffix=suffix_str))
+        end
+        shells[k] = (k, shell, elements)
+    end
+    # generate Hopping terms from validated data
+    hoppings = map(shells) do (k, shell, elements)
+        terms_list = Term[]
+        for elem in elements
+            push!(terms_list, Hopping(Symbol("t", elem.suffix), elem.ts[1], k; ismodulatable=ismodulatable))
+            push!(terms_list, Hopping(
+                Symbol("λ", elem.suffix), elem.λs[1], k, 𝕔⁺𝕔(:, :, σᶻ);
+                amplitude=MoireAmplitude{G}(elem.λs, shell; ℓ=3, atol=tol),
+                ismodulatable=ismodulatable
+            ))
+        end
+        return (terms_list...,)
+    end
+    # onsite chemical potentials
+    h0 = h(SVector(0.0, 0.0))
+    μ_terms = Term[]
+    for i in 1:nband
+        isapprox(real(h0[i,i]), 0; atol=tol) && continue
+        name = nband == 1 ? :μ : Symbol("μ", Char(0x2080+i))
+        push!(μ_terms, Onsite(name, real(h0[i,i])))
+    end
+    return (concatenate(hoppings...)..., μ_terms...)
+end
+
+"""
+    terms(c::CoulombIntegral; order::Int=truncation(c.wannier.lattice), tol=atol) -> NTuple{...}, Term}
+
+Generate Coulomb interaction terms from a CoulombIntegral.
+
+Not yet implemented.
+"""
+function terms(c::CoulombIntegral; order::Int=truncation(c.wannier.lattice), tol=atol)
+    error("Coulomb terms not yet implemented.")
 end
