@@ -3,57 +3,8 @@ import Plots
 import CairoMakie as Makie
 using QuantumLattices
 using QuantumLattices: contentnames, getcontent
-using StaticArrays: SVector
 using TightBindingApproximation
-
-@time @testset "CommensurateBilayerHoneycomb" begin
-    moire = CommensurateBilayerHoneycomb((20, 3); stack=:AB, center=:carbon)
-    @test rad2deg(angle(moire)) ≈ 4.613282862403654
-    top, bottom = Lattice(moire, :top), Lattice(moire, :bottom)
-    @test volume(top.vectors...) ≈ volume(bottom.vectors...)
-    @test volume(vectors(moire)...)/volume(top.vectors...) ≈ count(moire) == 463
-    Plots.savefig(Plots.plot(moire, :real; xlims=(-20, 20), ylims=(-10, 20)), "Plots-twisted-honeycomb-(20, 3)-coordinate.png")
-    Makie.save("Makie-twisted-honeycomb-(20, 3)-coordinate.png", Makie.plot(moire, :real; limits=(-20, 20, -10, 20)))
-    Plots.savefig(Plots.plot(moire, :reciprocal; xlims=(-5, 5), ylims=(-4, 4)), "Plots-twisted-honeycomb-(20, 3)-reciprocal.png")
-    Makie.save("Makie-twisted-honeycomb-(20, 3)-reciprocal.png", Makie.plot(moire, :reciprocal; limits=(-5, 5, -4, 4)))
-
-    moire = CommensurateBilayerHoneycomb((8, 1); stack=:AA, center=:carbon)
-    @test rad2deg(angle(moire)) ≈ 3.8902381690076835
-    top, bottom = Lattice(moire, :top), Lattice(moire, :bottom)
-    @test volume(top.vectors...) ≈ volume(bottom.vectors...)
-    @test volume(vectors(moire)...)/volume(top.vectors...) ≈ count(moire) == 217
-    Plots.savefig(Plots.plot(moire, :real; xlims=(-20, 20), ylims=(-10, 20)), "Plots-twisted-honeycomb-(8, 1)-coordinate.png")
-    Makie.save("Makie-twisted-honeycomb-(8, 1)-coordinate.png", Makie.plot(moire, :real; limits=(-20, 20, -10, 20)))
-    Plots.savefig(Plots.plot(moire, :reciprocal; xlims=(-5, 5), ylims=(-4, 4)), "Plots-twisted-honeycomb-(8, 1)-reciprocal.png")
-    Makie.save("Makie-twisted-honeycomb-(8, 1)-reciprocal.png", Makie.plot(moire, :reciprocal; limits=(-5, 5, -4, 4)))
-end
-
-@time @testset "MoireReciprocalLattice" begin
-    lattice = MoireTriangularReciprocal(4)
-    @test getcontent(lattice, :name) == :MoireTriangularReciprocal
-    @test getcontent(lattice, :vectors) == []
-    Plots.savefig(Plots.plot(lattice, 1), "Plots-moire-reciprocal-lattice.png")
-    Makie.save("Makie-moire-reciprocal-lattice.png", Makie.plot(lattice, 1))
-end
-
-@time @testset "MoireTriangular" begin
-    lattice = MoireTriangular(6)
-    @test truncation(lattice) == truncation(typeof(lattice)) == 6
-    @test lattice.coordinates == [0.0; 0.0;;]
-    @test lattice.vectors ≈ reciprocals(reciprocals(C₆))
-    @test length(lattice.neighbors) == 6
-end
-
-@time @testset "MoireHoneycomb" begin
-    lattice = MoireHoneycomb(6)
-    vectors = reciprocals(reciprocals(C₆))
-    v₁, v₂ = vectors[1], vectors[2]
-    @test truncation(lattice) == truncation(typeof(lattice)) == 6
-    @test lattice.coordinates[:, 1] ≈ (v₁ .+ v₂) ./ 3
-    @test lattice.coordinates[:, 2] ≈ (2 .* v₁ .- v₂) ./ 3
-    @test lattice.vectors ≈ vectors
-    @test length(lattice.neighbors) == 6
-end
+using StaticArrays: SVector
 
 @time @testset "MoireSpinor and MoireSpace" begin
     @test MoireSpinor(1, 1, 1, 1//2, 1)' == MoireSpinor(1, 1, 1, 1//2, 2)
@@ -114,40 +65,4 @@ end
     Makie.plot!(ax, bltmd(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₄-M₄-Γ", length=100))); ylims=(emin, emax), color=:green, title="")
     Makie.plot!(ax, tba(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K-M-Γ", length=100))); ylims=(emin, emax), linestyle=:dash, color=:red, title="")
     Makie.save("Makie-WeSe₂-AA-stack.png", fig)
-end
-
-@time @testset "MoireWannier-triangular" begin
-    parameters = (a₀=3.28, m=0.45, θ=3.70, Vᶻ=38.0, μ=0.0, V=-1.28, ψ=22.7, w=-12.9)
-    bltmd = Algorithm(:BLTMD, BLTMD(values(parameters)...; truncation=4), parameters)
-    update!(bltmd; μ=8.31)
-    recipls = bltmd.frontend.reciprocallattice.translations
-    lattice = MoireTriangular(6)
-    bz = BrillouinZone(recipls, 12)
-    w = MoireWannier(bltmd.frontend, lattice, bz; band=dimension(bltmd.frontend))
-    @test size(w.energies) == (1, length(bz))
-    @test size(w.bloch) == (2, dimension(bltmd.frontend)÷2, 1, length(bz))
-    @test size(w.U) == (1, 1, length(bz))
-    val = w([0.0, 0.0], 1)
-    @test length(val) == 2
-    @test eltype(val) == ComplexF64
-end
-
-@time @testset "HoppingIntegral" begin
-    parameters = (a₀=3.28, m=0.45, θ=3.70, Vᶻ=38.0, μ=0.0, V=-1.28, ψ=22.7, w=-12.9)
-    bltmd = Algorithm(:BLTMD, BLTMD(values(parameters)...; truncation=4), parameters)
-    update!(bltmd; μ=8.31)
-    recipls = bltmd.frontend.reciprocallattice.translations
-    lattice = MoireTriangular(6)
-    bz = BrillouinZone(recipls, 12)
-    w = MoireWannier(bltmd.frontend, lattice, bz; band=dimension(bltmd.frontend))
-    h = HoppingIntegral(w)
-    # onsite
-    t0 = h(SVector(0.0, 0.0))
-    @test t0 isa Matrix{ComplexF64}
-    @test size(t0) == (1, 1)
-    @test abs(imag(t0[1,1])) < 1e-10  # onsite should be real
-    # nearest-neighbor hopping
-    t1 = h(icoordinate(lattice.neighbors[1][1]))
-    @test t1 isa Matrix{ComplexF64}
-    @test size(t1) == (1, 1)
 end

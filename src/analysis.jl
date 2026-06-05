@@ -24,13 +24,13 @@ end
 
 #=== triangular constructor (nband=1, U(1) gauge fix) ===#
 """
-    MoireWannier(moiresystem::MoireSystem, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(moiresystem))
+    MoireWannier(moiresystem::MoireSystem, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(moiresystem), tol::Real=atol)
 
 Construct the Wannier function for a single band on a triangular lattice.
 
 Gauge fixing: U(1) phase such that the bottom-layer component at r=0 (MM site) is real and positive.
 """
-function MoireWannier(moiresystem::MoireSystem, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(moiresystem))
+function MoireWannier(moiresystem::MoireSystem, lattice::MoireTriangular, brillouinzone::BrillouinZone; band::Int=dimension(moiresystem), tol::Real=atol)
     dim = dimension(moiresystem)
     @assert 1 <= band <= dim "MoireWannier error: band index $band out of range [1, $dim]."
     nlayer, nband, nk = 2, 1, length(brillouinzone)
@@ -50,7 +50,7 @@ function MoireWannier(moiresystem::MoireSystem, lattice::MoireTriangular, brillo
         for ig in 1:nG
             ψ_MM += bloch[1, ig, 1, ik]
         end
-        @assert abs(ψ_MM) > atol "MoireWannier error: wavefunction at r=0 is zero at k=$k; gauge fixing failed."
+        @assert abs(ψ_MM) > tol "MoireWannier error: wavefunction at r=0 is zero at k=$k; gauge fixing failed."
         U[1, 1, ik] = conj(ψ_MM) / abs(ψ_MM)
     end
     aₘ = moiresystem.parameters.a₀ / (2sind(moiresystem.parameters.θ/2))
@@ -361,107 +361,149 @@ function (c::CoulombIntegral)(R::AbstractVector{<:Number}, V=BareCoulomb(1.0))
 end
 
 #=== Hopping and Coulomb terms from Wannier integrals ===#
+"""
+    SublatticeAmplitude{G<:PointGroup, N, D<:Number} <: Function
+
+Spin-independent hopping amplitude. Matches a bond to the registered set of reference bonds via [`sign`](@ref) and returns `1` (match) or `0` (no match).
+"""
+struct SublatticeAmplitude{G<:PointGroup, N, D<:Number} <: Function
+    refs::NTuple{N, Bond{Int, Point{2, D}, SVector{2, Point{2, D}}}}
+    nsublattice::Int
+    function SublatticeAmplitude{G}(refs::NTuple{N, Bond{Int, Point{2, D}, SVector{2, Point{2, D}}}}, nsublattice::Int) where {G<:PointGroup, N, D<:Number}
+        return new{G, N, D}(refs, nsublattice)
+    end
+end
+function (amp::SublatticeAmplitude{G})(bond::Bond) where {G<:PointGroup}
+    for ref in amp.refs
+        !iszero(sign(G, ref, bond, amp.nsublattice)) && return 1
+    end
+    return 0
+end
 
 """
-    MoireAmplitude{N, G<:PointGroup}
+    SpinOrbitalCouplingAmplitude{G<:PointGroup, N, D<:Number} <: Function
 
-SOC hopping amplitude for Moiré superlattices under point group `G`.
-
-Fields:
-- `signs::NTuple{N, Int}` — relative polarities between symmetry-inequivalent stars within a shell
-- `θs::NTuple{N, Float64}` — reference azimuthal angles of each star (°)
-- `ℓ::Int` — angular momentum channel (3 for Moiré C₆ systems)
-
-When called with a [`Bond`](@ref), matches its azimuth to the correct star and returns
-`-1im * sign * cosd(ℓ * Δθ)` where Δθ is the angular deviation from the reference.
+Spin-orbital-coupling hopping amplitude under point group `G`. Matches a bond to the registered reference bonds via [`sign`](@ref) and returns the SOC factor `-1im * sign * result` where `sign` is the per-star relative sign and `result` is the spatial ±1 parity from `sign`.
 """
-struct MoireAmplitude{G<:PointGroup, N} <: Function
+struct SpinOrbitalCouplingAmplitude{G<:PointGroup, N, D<:Number} <: Function
     signs::NTuple{N, Int}
-    θs::NTuple{N, Float64}
-    ℓ::Int
-    function MoireAmplitude{G}(λs::AbstractVector{<:Real}, shell::AbstractVector{<:Bond}; ℓ::Int=3, atol::Real=atol) where G<:PointGroup
-        N = length(λs)
-        signs = ntuple(b -> isapprox(λs[b], 0; atol=atol) ? 1 : round(Int, λs[1]/λs[b]), N)
-        θs = ntuple(i -> azimuthd(rcoordinate(shell[i])), N)
-        return new{G, N}(signs, θs, ℓ)
+    refs::NTuple{N, Bond{Int, Point{2, D}, SVector{2, Point{2, D}}}}
+    nsublattice::Int
+    function SpinOrbitalCouplingAmplitude{G}(signs::NTuple{N, Int}, refs::NTuple{N, Bond{Int, Point{2, D}, SVector{2, Point{2, D}}}}, nsublattice::Int) where {G<:PointGroup, N, D<:Number}
+        return new{G, N, D}(signs, refs, nsublattice)
     end
 end
-
-function (amp::MoireAmplitude{G})(bond::Bond) where G<:PointGroup
-    αd = rad2deg(angle(G))
-    θ = azimuthd(rcoordinate(bond))
-    for (sign, θ₀) in zip(amp.signs, amp.θs)
-        Δ = (θ - θ₀) / αd
-        isapprox(round(Int, Δ), Δ; atol=atol) || continue
-        return -1im * sign * cosd(amp.ℓ * (θ - θ₀))
+function (amp::SpinOrbitalCouplingAmplitude{G})(bond::Bond) where G<:PointGroup
+    for (s, ref) in zip(amp.signs, amp.refs)
+        result = sign(G, ref, bond, amp.nsublattice)
+        iszero(result) && continue
+        return -1im * s * result
     end
-    error("amplitude error: mismatched bond.")
+    return 0im
 end
 
 """
-    terms(h::HoppingIntegral; order::Int=truncation(h.wannier.lattice), ismodulatable::Bool=true, tol=atol) -> NTuple{...}, Term}
+    terms(hopping::HoppingIntegral; order::Int=truncation(hopping.wannier.lattice), ismodulatable::Bool=true, tol=atol) -> Tuple
 
-Generate hopping terms from a [`HoppingIntegral`](@ref) for any Moiré superlattice.
+Generate spin-independent and spin-orbital-coupling [`Hopping`](@ref) terms from a [`HoppingIntegral`](@ref).
 
-For each neighbor shell, collects the nband×nband hopping matrices for symmetry-inequivalent
-bonds, decomposes each matrix element ``(i,j)`` into spin-independent (real part) and SOC
-(imaginary part) components, and generates corresponding [`Hopping`](@ref) terms.
+## Algorithm
 
-For triangular lattices (nband=1), each shell produces 2 terms (spin-independent + SOC).
-For multi-band lattices (nband>1), terms are generated per sublattice pair with subscripted
-names (e.g., `t₁₁₂` for shell 1, sublattice pair (1,2)).
+1. **Per-pair extraction** — For each neighbor order ``k`` and each sublattice pair ``(i, j)``, the coefficient ``t + iλ = hopping(R)[i,j]`` is extracted for every bond in the pair. Within a sublattice pair, ``t`` and ``|λ|`` must be consistent (asserted).
+
+2. **Grouping** — Entries are grouped by ``(t, |λ|)``: ``t`` must match exactly (including sign), ``λ`` by magnitude. Relative signs between grouped ``λ`` values are precomputed.
+
+3. **Term construction** — Each group yields two terms:
+   - `t` → [`Hopping`](@ref) with [`SublatticeAmplitude`](@ref) for sublattice matching.
+   - `λ` → [`Hopping`](@ref) with ``σᶻ`` coupling and [`SpinOrbitalCouplingAmplitude`](@ref) for spatial + sublattice matching.
+
+4. **Onsite** — Diagonal ``hopping(0)[i, i]`` → [`Onsite`](@ref) chemical potentials.
+
+## Naming
+
+- `nband = 1` and `nband > 1` with single group per shell: `t₁`, `λ₁`, `t₂`, `λ₂`, …
+- `nband > 1` with multiple groups per shell: all pairs listed, e.g. `t₁₍₁₋₂₊₂₋₃₎`.
 """
-function terms(h::HoppingIntegral; order::Int=truncation(h.wannier.lattice), ismodulatable::Bool=true, tol=atol)
-    lattice = h.wannier.lattice
-    nband = size(h.wannier.energies, 1)
-    G = typeof(PointGroup(lattice))
-    # collect hopping matrices and validate symmetry per shell
-    shells = Vector{Tuple{Int, Vector{Bond}, Vector{Any}}}(undef, order)
+function terms(hopping::HoppingIntegral; order::Int=truncation(hopping.wannier.lattice), ismodulatable::Bool=true, tol=atol)
+    lattice = hopping.wannier.lattice
+    B = eltype(bonds(lattice.neighbors))
+    DataEntry = @NamedTuple{t::Float64, λ::Float64, bond::B}
+    GroupEntry = @NamedTuple{t::Float64, λ::Float64, signs::Vector{Int}, bonds::Vector{B}}
+    # P1: extract and validate per pair, collect flat data
+    shells = Vector{Vector{GroupEntry}}(undef, order)
     for k in 1:order
-        shell = lattice.neighbors[k]
-        nstar = length(shell)
-        hmats = [h(icoordinate(bond)) for bond in shell]
-        elements = Vector{Any}()
-        for i in 1:nband, j in 1:nband
-            ts = [real(hmats[b][i,j]) for b in 1:nstar]
-            λs = [imag(hmats[b][i,j]) for b in 1:nstar]
-            # skip zero element
-            all(t -> isapprox(t, 0; atol=tol), ts) && all(λ -> isapprox(λ, 0; atol=tol), λs) && continue
-            # assert |t| and |λ| are the same magnitude across all stars
-            tref, λref = abs(ts[1]), abs(λs[1])
-            @assert all(b -> isapprox(abs(ts[b]), tref; atol=tol), 1:nstar) "terms error: |t| mismatch for ($i,$j) in shell $k."
-            @assert all(b -> isapprox(abs(λs[b]), λref; atol=tol), 1:nstar) "terms error: |λ| mismatch for ($i,$j) in shell $k."
-            # name suffix
-            suffix_str = join('₀'+d for d in digits(k))
-            if nband > 1
-                suffix_str *= string(Char(0x2080+i), Char(0x2080+j))
+        data = DataEntry[]
+        for pair in pairs(lattice.neighbors, k)
+            bonds_kp = bonds(lattice.neighbors, k, pair)
+            coeffs = [hopping(icoordinate(bond))[pair...] for bond in bonds_kp]
+            ts, λs = real.(coeffs), imag.(coeffs)
+            tref, λref = first(ts), abs(first(λs))
+            for (t, λ) in zip(ts, λs)
+                @assert isapprox(t, tref; atol=tol) "terms error: t mismatch for pair $pair in shell $k."
+                @assert isapprox(abs(λ), λref; atol=tol) "terms error: |λ| mismatch for pair $pair in shell $k."
             end
-            push!(elements, (ts=ts, λs=λs, suffix=suffix_str))
+            isapprox(tref, 0; atol=tol) && isapprox(λref, 0; atol=tol) && continue
+            for (t, λ, bond) in zip(ts, λs, bonds_kp)
+                push!(data, (t=t, λ=λ, bond=bond))
+            end
         end
-        shells[k] = (k, shell, elements)
+        # P2: group by (t, |λ|)
+        groups = GroupEntry[]
+        for (t, λ, bond) in data
+            found = false
+            for group in groups
+                isapprox(t, group.t; atol=tol) && isapprox(abs(λ), abs(group.λ); atol=tol) || continue
+                push!(group.signs, sign(λ)*sign(group.λ))
+                push!(group.bonds, bond)
+                found = true
+                break
+            end
+            found && continue
+            push!(groups, (t=t, λ=λ, signs=[abs(sign(λ))], bonds=[bond]))
+        end
+        shells[k] = groups
     end
-    # generate Hopping terms from validated data
-    hoppings = map(shells) do (k, shell, elements)
-        terms_list = Term[]
-        for elem in elements
-            push!(terms_list, Hopping(Symbol("t", elem.suffix), elem.ts[1], k; ismodulatable=ismodulatable))
-            push!(terms_list, Hopping(
-                Symbol("λ", elem.suffix), elem.λs[1], k, 𝕔⁺𝕔(:, :, σᶻ);
-                amplitude=MoireAmplitude{G}(elem.λs, shell; ℓ=3, atol=tol),
+    # P3: generate Hopping terms
+    G = typeof(PointGroup(lattice))
+    nband = size(hopping.wannier.energies, 1)
+    nsub = nsublattice(lattice.neighbors)
+    hoppings = map(enumerate(shells)) do (k, groups)
+        result = Term[]
+        for group in groups
+            suffix = join('₀'+d for d in reverse(digits(k)))
+            refs = Tuple(group.bonds)
+            if length(groups) > 1
+                pairs = String[]
+                for bond in refs
+                    i = join('₀'+d for d in reverse(digits(bond[1].site % nsub + 1)))
+                    j = join('₀'+d for d in reverse(digits(bond[2].site % nsub + 1)))
+                    push!(pairs, string(i, '₋', j))
+                end
+                suffix *= string('₍', join(unique!(pairs), '₊'), '₎')
+            end
+            push!(result, Hopping(
+                Symbol("t", suffix), group.t, k;
+                amplitude=SublatticeAmplitude{G}(refs, nsub),
+                ismodulatable=ismodulatable
+            ))
+            push!(result, Hopping(
+                Symbol("λ", suffix), group.λ, k, 𝕔⁺𝕔(:, :, σᶻ);
+                amplitude=SpinOrbitalCouplingAmplitude{G}(Tuple(group.signs), refs, nsub),
                 ismodulatable=ismodulatable
             ))
         end
-        return (terms_list...,)
+        return Tuple(result)
     end
-    # onsite chemical potentials
-    h0 = h(SVector(0.0, 0.0))
-    μ_terms = Term[]
+    # P4: onsite
+    h₀ = hopping(SVector(0.0, 0.0))
+    μs = Term[]
     for i in 1:nband
-        isapprox(real(h0[i,i]), 0; atol=tol) && continue
-        name = nband == 1 ? :μ : Symbol("μ", Char(0x2080+i))
-        push!(μ_terms, Onsite(name, real(h0[i,i])))
+        μ = real(h₀[i, i])
+        isapprox(μ, 0; atol=tol) && continue
+        name = nband==1 ? :μ : Symbol("μ", join('₀'+d for d in reverse(digits(i))))
+        push!(μs, Onsite(name, μ))
     end
-    return (concatenate(hoppings...)..., μ_terms...)
+    return (concatenate(hoppings...)..., μs...)
 end
 
 """

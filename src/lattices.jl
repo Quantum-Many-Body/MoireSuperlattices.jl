@@ -90,28 +90,41 @@ Abstract type for point group symmetries used to classify bond equivalence and p
 abstract type PointGroup end
 
 """
-    Base.angle(sym::PointGroup) -> Float64
-    Base.angle(::Type{G}) where {G<:PointGroup} -> Float64
+    angle(sym::PointGroup) -> Float64
+    angle(::Type{G}) where {G<:PointGroup} -> Float64
 
 Fundamental rotation angle of the point group in radians.
 """
 @inline Base.angle(sym::PointGroup) = angle(typeof(sym))
 
 """
-    Base.sign(sym::PointGroup, ref::Bond, bond::Bond) -> Int
-    Base.sign(::Type{G}, ref::Bond, bond::Bond) where {G<:PointGroup} -> Int
+    sign(::Type{G}, ref::Bond, bond::Bond, nsublattice::Int; atol::Real=atol) where {G<:PointGroup} -> Int
+    sign(sym::PointGroup, ref::Bond, bond::Bond, nsublattice::Int; atol::Real=atol) -> Int
 
-Compare `bond` to `ref` under the given point group.
+Unified bond equivalence check under point group `G`.
 
-Returns `+1` if parallel, `-1` if antiparallel, `0` if not equivalent.
+Two bonds are equivalent when all three conditions hold:
+1. Same neighbor order: `ref.kind == bond.kind`.
+2. Same spatial orientation modulo the fundamental rotation angle of `G`.
+3. Same unordered sublattice pair `{i, j}` modulo `nsublattice`.
+
+Returns:
+- `+1`: parallel and same pair (even number of fundamental rotations, ``Δ`` is even).
+- `-1`: antiparallel and same pair (odd number of fundamental rotations, ``Δ`` is odd).
+- `0`: not equivalent.
 """
-@inline Base.sign(sym::PointGroup, ref::Bond, bond::Bond) = Base.sign(typeof(sym), ref, bond)
-function Base.sign(::Type{G}, ref::Bond, bond::Bond) where {G<:PointGroup}
-    α = angle(G)
-    θ, θ₀ = azimuth(rcoordinate(bond)), azimuth(rcoordinate(ref))
+@inline Base.sign(sym::PointGroup, ref::Bond, bond::Bond, nsublattice::Int) = sign(typeof(sym), ref, bond, nsublattice)
+function Base.sign(::Type{G}, ref::Bond, bond::Bond, nsublattice::Int) where {G<:PointGroup}
+    ref.kind == bond.kind || return 0
+    rᵢ, rⱼ = ref[1].site % nsublattice, ref[2].site % nsublattice
+    bᵢ, bⱼ = bond[1].site % nsublattice, bond[2].site % nsublattice
+    ((rᵢ == bᵢ && rⱼ == bⱼ) || (rᵢ == bⱼ && rⱼ == bᵢ)) || return 0
+    α, θ, θ₀ = angle(G), azimuth(rcoordinate(bond)), azimuth(rcoordinate(ref))
     Δ = (θ - θ₀) / α
     Δ_int = round(Int, Δ)
     isapprox(Δ, Δ_int; atol=atol) || return 0
+    # consistency: for different sublattices, sublattice swap parity must match angular parity
+    @assert rᵢ == rⱼ || (rᵢ == bᵢ && rⱼ == bⱼ) == iseven(Δ_int) "sign error: sublattice swap parity ($rᵢ, $rⱼ)→($bᵢ, $bⱼ) inconsistent with angular parity Δ_int=$Δ_int."
     return iseven(Δ_int) ? 1 : -1
 end
 
@@ -192,36 +205,53 @@ end
 
 #=== MoireNeighbors ===#
 """
-    MoireNeighbors{G<:PointGroup, N, D<:Number}
+    MoireNeighbors{G<:PointGroup, D<:Number}
 
-Neighbor shells of a Moire superlattice under point group `G`, storing [`Bond`](@ref) objects grouped by neighbor order (kind).
+Flat collection of symmetry-inequivalent [`Bond`](@ref) objects under point group `G`.
+
+Use [`bonds`](@ref) and [`pairs`](@ref) to query by neighbor order and sublattice pair.
 """
-struct MoireNeighbors{G<:PointGroup, N, D<:Number}
-    shells::NTuple{N, Vector{Bond{Int, Point{2, D}}}}
+struct MoireNeighbors{G<:PointGroup, D<:Number}
+    bonds::Vector{Bond{Int, Point{2, D}, SVector{2, Point{2, D}}}}
+    nsublattice::Int
+    truncation::Int
 end
 
 """
-    MoireNeighbors{G}(shells) where {G<:PointGroup}
-    MoireNeighbors{G, N, D}() where {G<:PointGroup, N, D<:Number}
-    MoireNeighbors{G, N}() where {G<:PointGroup, N}
-    MoireNeighbors{G, N}(lattice::Lattice) where {G<:PointGroup, N}
+    MoireNeighbors{G}(nsublattice, truncation) where {G<:PointGroup}
+    MoireNeighbors{G, D}(nsublattice, truncation) where {G<:PointGroup, D<:Number}
+    MoireNeighbors{G}(lattice, truncation) where {G<:PointGroup}
 
-Construct `MoireNeighbors` from pre-built shells, empty for coordinate type `D`,
-empty (default `Float64`), or by collecting symmetry-inequivalent bonds from `lattice` up to order `N`.
+Constructors:
+
+1. `MoireNeighbors{G}(nsublattice, truncation)` — empty, default `Float64` coordinates.
+2. `MoireNeighbors{G, D}(nsublattice, truncation)` — empty, coordinate type `D`.
+3. `MoireNeighbors{G}(lattice, truncation)` — collect symmetry-inequivalent bonds; `nsublattice` from `length(lattice)`.
 """
-@inline MoireNeighbors{G}(shells::NTuple{N, Vector{Bond{Int, Point{2, D}}}}) where {G<:PointGroup, N, D<:Number} = MoireNeighbors{G, N, D}(shells)
-@inline function MoireNeighbors{G, N, D}() where {G<:PointGroup, N, D<:Number}
-    shells = ntuple(_ -> Bond{Int, Point{2, D}}[], Val(N))
-    return MoireNeighbors{G}(shells)
-end
-@inline MoireNeighbors{G, N}() where {G<:PointGroup, N} = MoireNeighbors{G, N, Float64}()
-@inline function MoireNeighbors{G, N}(lattice::Lattice) where {G<:PointGroup, N}
-    neighbors = MoireNeighbors{G, N, scalartype(lattice)}()
-    for bond in bonds(lattice, N)
+@inline MoireNeighbors{G}(nsublattice::Int, truncation::Int) where {G<:PointGroup} = MoireNeighbors{G, Float64}(nsublattice, truncation)
+@inline MoireNeighbors{G, D}(nsublattice::Int, truncation::Int) where {G<:PointGroup, D<:Number} = MoireNeighbors{G, D}(Bond{Int, Point{2, D}, SVector{2, Point{2, D}}}[], nsublattice, truncation)
+@inline function MoireNeighbors{G}(lattice::AbstractLattice, truncation::Int) where {G<:PointGroup}
+    nsublattice = length(lattice)
+    neighbors = MoireNeighbors{G, scalartype(lattice)}(nsublattice, truncation)
+    for bond in bonds(lattice, truncation)
         push!(neighbors, bond)
     end
     return neighbors
 end
+
+"""
+    nsublattice(neighbors::MoireNeighbors) -> Int
+
+Number of sublattice sites per unit cell of the effective lattice.
+"""
+@inline nsublattice(neighbors::MoireNeighbors) = neighbors.nsublattice
+
+"""
+    truncation(neighbors::MoireNeighbors) -> Int
+
+Maximum neighbor order (kind) stored in `neighbors`.
+"""
+@inline truncation(neighbors::MoireNeighbors) = neighbors.truncation
 
 """
     PointGroup(neighbors::MoireNeighbors) -> PointGroup
@@ -233,29 +263,42 @@ Get the point group of MoireNeighbors from an instance or type.
 @inline PointGroup(::Type{<:MoireNeighbors{G}}) where {G<:PointGroup} = G()
 
 """
-    truncation(neighbors::MoireNeighbors) -> Int
-    truncation(::Type{<:MoireNeighbors{<:PointGroup, N}}) where N -> N
+    bonds(neighbors::MoireNeighbors) -> Vector{<:Bond}
+    bonds(neighbors::MoireNeighbors, k::Int) -> Vector{<:Bond}
+    bonds(neighbors::MoireNeighbors, k::Int, pair::Tuple{Int, Int}) -> Vector{<:Bond}
 
-Get the number of neighbor shells from an instance or type.
+Three-level bond access: all bonds, by neighbor order `k`, or by `(k, pair)`.
+
+Here, `pair` is 1-based ``(i, j)`` unordered sublattice indices.
 """
-@inline truncation(neighbors::MoireNeighbors) = truncation(typeof(neighbors))
-@inline truncation(::Type{<:MoireNeighbors{<:PointGroup, N}}) where N = N
+@inline bonds(neighbors::MoireNeighbors) = neighbors.bonds
+@inline bonds(neighbors::MoireNeighbors, k::Int) = [bond for bond in neighbors.bonds if bond.kind == k]
+function bonds(neighbors::MoireNeighbors, k::Int, pair::Tuple{Int, Int})
+    i, j = pair
+    n = neighbors.nsublattice
+    return [bond for bond in neighbors.bonds if bond.kind == k && (bond[1].site%n+1, bond[2].site%n+1) in ((i, j), (j, i))]
+end
 
 """
-    getindex(neighbors::MoireNeighbors, k::Int) -> Vector{<:Bond}
+    pairs(neighbors::MoireNeighbors, k::Int) -> Vector{Tuple{Int, Int}}
 
-Get the `k`-th neighbor shell (1-indexed).
+All 1-based unordered sublattice pairs ``{i, j}`` present in neighbor order `k`.
 """
-@inline Base.getindex(neighbors::MoireNeighbors, k::Int) = neighbors.shells[k]
-@inline Base.firstindex(::MoireNeighbors) = 1
-@inline Base.lastindex(neighbors::MoireNeighbors) = truncation(neighbors)
-
-"""
-    length(neighbors::MoireNeighbors) -> Int
-
-Number of neighbor shells (same as [`truncation`](@ref)).
-"""
-@inline Base.length(neighbors::MoireNeighbors) = truncation(neighbors)
+function Base.pairs(neighbors::MoireNeighbors, k::Int)
+    seen = Set{Tuple{Int, Int}}()
+    result = Tuple{Int, Int}[]
+    n = neighbors.nsublattice
+    for bond in neighbors.bonds
+        bond.kind == k || continue
+        p = (bond[1].site % n + 1, bond[2].site % n + 1)
+        key = p[1] <= p[2] ? p : (p[2], p[1])
+        key in seen || begin
+            push!(seen, key)
+            push!(result, key)
+        end
+    end
+    return result
+end
 
 """
     in(bond::Bond, neighbors::MoireNeighbors) -> Bool
@@ -263,43 +306,28 @@ Number of neighbor shells (same as [`truncation`](@ref)).
 Check whether `bond` is symmetry-equivalent to any bond in `neighbors`.
 """
 @inline function Base.in(bond::Bond, neighbors::MoireNeighbors{G}) where {G<:PointGroup}
-    bond.kind < 1 && return false
-    return any(ref -> !iszero(sign(G, bond, ref)), neighbors[bond.kind])
+    return length(bond)==2 && any(ref -> !iszero(sign(G, bond, ref, neighbors.nsublattice)), neighbors.bonds)
 end
 
 """
     push!(neighbors::MoireNeighbors, bond::Bond) -> MoireNeighbors
 
-Push `bond` into `neighbors` if it is not symmetry-equivalent to any existing bond
-in the same shell. Bonds with `kind ≤ 0` are ignored.
+Push `bond` if not symmetry-equivalent to an existing bond.
 """
 @inline function Base.push!(neighbors::MoireNeighbors, bond::Bond)
-    bond.kind > 0 || return neighbors
-    bond ∉ neighbors && push!(neighbors.shells[bond.kind], bond)
-    return neighbors
-end
-
-"""
-    sign(neighbors::MoireNeighbors, bond::Bond) -> Int
-
-Find the direction of `bond` relative to the matched reference in `neighbors[bond.kind]`. Returns `+1`/`-1`/`0` (not found).
-"""
-function Base.sign(neighbors::MoireNeighbors{G}, bond::Bond) where {G<:PointGroup}
-    bond.kind < 1 && return 0
-    for ref in neighbors[bond.kind]
-        s = sign(G, ref, bond)
-        s == 0 || return s
+    if length(bond) == 2 && bond ∉ neighbors
+        push!(neighbors.bonds, Bond(bond.kind, SVector(bond[1], bond[2])))
     end
-    return 0
+    return neighbors
 end
 
 #=== MoireSuperlattice ===#
 """
-    MoireSuperlattice{G<:PointGroup, N, D<:Number} <: AbstractLattice{2, D, 2}
+    MoireSuperlattice{G<:PointGroup, D<:Number} <: AbstractLattice{2, D, 2}
 
-Abstract type of the emergent superlattices in Moire systems, parameterized by point group `G`, truncation `N`, and coordinate type `D`.
+Abstract type of the emergent superlattices in Moire systems, parameterized by point group `G` and coordinate type `D`.
 """
-abstract type MoireSuperlattice{G<:PointGroup, N, D<:Number} <: AbstractLattice{2, D, 2} end
+abstract type MoireSuperlattice{G<:PointGroup, D<:Number} <: AbstractLattice{2, D, 2} end
 
 """
     PointGroup(lattice::MoireSuperlattice) -> PointGroup
@@ -312,64 +340,58 @@ Get the point group of a Moire superlattice from an instance or type.
 
 """
     truncation(lattice::MoireSuperlattice) -> Int
-    truncation(::Type{<:MoireSuperlattice{<:PointGroup, N}}) where N -> N
 
-Get the truncation (number of shells) of a Moire superlattice from an instance or type.
+Get the truncation (number of shells) of a Moire superlattice.
 """
-@inline truncation(lattice::MoireSuperlattice) = truncation(typeof(lattice))
-@inline truncation(::Type{<:MoireSuperlattice{<:PointGroup, N}}) where N = N
+@inline truncation(lattice::MoireSuperlattice) = truncation(lattice.neighbors)
 
 """
-    MoireTriangular{N, D<:Number} <: MoireSuperlattice{C₆, N, D}
+    MoireTriangular{D<:Number} <: MoireSuperlattice{C₆, D}
 
 Emergent triangular superlattice in Moire systems.
 """
-struct MoireTriangular{N, D<:Number} <: MoireSuperlattice{C₆, N, D}
+struct MoireTriangular{D<:Number} <: MoireSuperlattice{C₆, D}
     coordinates::Matrix{D}
     vectors::SVector{2, SVector{2, D}}
-    neighbors::MoireNeighbors{C₆, N, D}
+    neighbors::MoireNeighbors{C₆, D}
 end
 @inline getcontent(::MoireTriangular, ::Val{:name}) = :MoireTriangular
 
 """
     MoireTriangular(truncation::Int, [T=Float64])
 
-Construct with truncation `N = truncation` and coordinate type `T`.
-
-The single site per unitcell is at the origin (MM stacking site).
+Construct with coordinate type `T`. The single site per unitcell is at the origin (MM stacking site).
 """
 function MoireTriangular(truncation::Int, ::Type{T}=Float64) where {T<:Number}
     vectors = reciprocals(reciprocals(C₆, T))
     coordinates = zeros(T, 2, 1)
-    neighbors = MoireNeighbors{C₆, truncation}(Lattice(:MoireTriangular, coordinates, vectors))
+    neighbors = MoireNeighbors{C₆}(Lattice(:MoireTriangular, coordinates, vectors), truncation)
     return MoireTriangular(coordinates, vectors, neighbors)
 end
 
 """
-    MoireHoneycomb{N, D<:Number} <: MoireSuperlattice{C₆, N, D}
+    MoireHoneycomb{D<:Number} <: MoireSuperlattice{C₆, D}
 
 Emergent honeycomb superlattice in Moire systems, composed of MX and XM stacking sites.
 """
-struct MoireHoneycomb{N, D<:Number} <: MoireSuperlattice{C₆, N, D}
+struct MoireHoneycomb{D<:Number} <: MoireSuperlattice{C₆, D}
     coordinates::Matrix{D}
     vectors::SVector{2, SVector{2, D}}
-    neighbors::MoireNeighbors{C₆, N, D}
+    neighbors::MoireNeighbors{C₆, D}
 end
 @inline getcontent(::MoireHoneycomb, ::Val{:name}) = :MoireHoneycomb
 
 """
     MoireHoneycomb(truncation::Int, [T=Float64])
 
-Construct with truncation `N = truncation` and coordinate type `T`.
-
-MX at `(v₁+v₂)/3`, XM at `(2v₁-v₂)/3` (MM stacking at origin).
+Construct with coordinate type `T`. MX at `(v₁+v₂)/3`, XM at `(2v₁-v₂)/3`.
 """
 function MoireHoneycomb(truncation::Int, ::Type{T}=Float64) where {T<:Number}
     v₁, v₂ = reciprocals(reciprocals(C₆, T))
     coordinates = zeros(T, 2, 2)
     coordinates[:, 1] = (v₁ + v₂) / 3
     coordinates[:, 2] = (2v₁ - v₂) / 3
-    neighbors = MoireNeighbors{C₆, truncation}(Lattice(:MoireHoneycomb, coordinates, SVector(v₁, v₂)))
+    neighbors = MoireNeighbors{C₆}(Lattice(:MoireHoneycomb, coordinates, SVector(v₁, v₂)), truncation)
     return MoireHoneycomb(coordinates, SVector(v₁, v₂), neighbors)
 end
 
