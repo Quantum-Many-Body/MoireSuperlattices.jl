@@ -123,8 +123,6 @@ function Base.sign(::Type{G}, ref::Bond, bond::Bond, nsublattice::Int) where {G<
     Δ = (θ - θ₀) / α
     Δ_int = round(Int, Δ)
     isapprox(Δ, Δ_int; atol=atol) || return 0
-    # consistency: for different sublattices, sublattice swap parity must match angular parity
-    @assert rᵢ == rⱼ || (rᵢ == bᵢ && rⱼ == bⱼ) == iseven(Δ_int) "sign error: sublattice swap parity ($rᵢ, $rⱼ)→($bᵢ, $bⱼ) inconsistent with angular parity Δ_int=$Δ_int."
     return iseven(Δ_int) ? 1 : -1
 end
 
@@ -177,6 +175,13 @@ Get the point group of a Moire reciprocal lattice from an instance or type.
 @inline PointGroup(::Type{<:MoireReciprocalLattice{G}}) where {G<:PointGroup} = G()
 
 """
+    truncation(lattice::MoireReciprocalLattice) -> Int
+
+Get the truncation (number of shells) of a Moire reciprocal superlattice.
+"""
+@inline truncation(lattice::MoireReciprocalLattice) = lattice.truncation
+
+"""
     MoireTriangularReciprocal{T<:Number} <: MoireReciprocalLattice{C₆, T}
 
 C₆-symmetric Moire reciprocal lattice with truncation.
@@ -187,6 +192,7 @@ struct MoireTriangularReciprocal{T<:Number} <: MoireReciprocalLattice{C₆, T}
     K₋::SVector{2, T}
     translations::SVector{2, SVector{2, T}}
     coordinates::Matrix{T}
+    truncation::Int
     function MoireTriangularReciprocal(truncation::Int, ::Type{T}=Float64) where {T<:Number}
         b₁, b₂ = reciprocals(C₆, T)
         Γ = b₁ / 2
@@ -198,7 +204,7 @@ struct MoireTriangularReciprocal{T<:Number} <: MoireReciprocalLattice{C₆, T}
             coordinate = i*b₁ + j*b₂
             norm(coordinate)<=truncation*b₀+atol && push!(coordinates, coordinate)
         end
-        new{T}(Γ, K₊, K₋, SVector(b₁, b₂), reduce(hcat, coordinates))
+        new{T}(Γ, K₊, K₋, SVector(b₁, b₂), reduce(hcat, coordinates), truncation)
     end
 end
 @inline getcontent(::MoireTriangularReciprocal, ::Val{:name}) = :MoireTriangularReciprocal

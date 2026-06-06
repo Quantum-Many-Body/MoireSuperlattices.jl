@@ -2,7 +2,7 @@ using MoireSuperlattices
 using QuantumLattices
 using StaticArrays: SVector
 
-@time @testset "MoireWannier-triangular" begin
+@testset "MoireWannier-triangular" begin
     parameters = (a₀=3.28, m=0.45, θ=3.70, Vᶻ=38.0, μ=0.0, V=-1.28, ψ=22.7, w=-12.9)
     bltmd = Algorithm(:BLTMD, BLTMD(values(parameters)...; truncation=4), parameters)
     update!(bltmd; μ=8.31)
@@ -18,7 +18,7 @@ using StaticArrays: SVector
     @test eltype(val) == ComplexF64
 end
 
-@time @testset "HoppingIntegral" begin
+@testset "HoppingIntegral" begin
     parameters = (a₀=3.28, m=0.45, θ=3.70, Vᶻ=38.0, μ=0.0, V=-1.28, ψ=22.7, w=-12.9)
     bltmd = Algorithm(:BLTMD, BLTMD(values(parameters)...; truncation=4), parameters)
     update!(bltmd; μ=8.31)

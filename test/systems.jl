@@ -1,12 +1,11 @@
 using MoireSuperlattices
+using QuantumLattices
+using QuantumLattices: contentnames
+using TightBindingApproximation
 import Plots
 import CairoMakie as Makie
-using QuantumLattices
-using QuantumLattices: contentnames, getcontent
-using TightBindingApproximation
-using StaticArrays: SVector
 
-@time @testset "MoireSpinor and MoireSpace" begin
+@testset "MoireSpinor and MoireSpace" begin
     @test MoireSpinor(1, 1, 1, 1//2, 1)' == MoireSpinor(1, 1, 1, 1//2, 2)
     @test MoireSpinor(2, 1, 1, -1//2, 2)' == MoireSpinor(2, 1, 1, -1//2, 1)
     @test string(MoireSpinor(:, 1, 1, 1//2, 1)) == "MoireSpinor(:, 1, 1, 1//2, 1)"
@@ -35,7 +34,7 @@ using StaticArrays: SVector
     @test shape(moire, MoireSpinor(:, :, 2, :, 2)) == (1:2, 1:2, 2:2, 1:2, 2:2)
 end
 
-@time @testset "BLTMD" begin
+@testset "BLTMD" begin
     parameters = (a₀=3.28, m=0.45, θ=3.70, Vᶻ=38.0, μ=0.0, V=-1.28, ψ=22.7, w=-12.9)
     bltmd = Algorithm(:BLTMD, BLTMD(values(parameters)...; truncation=4), parameters)
     @test contentnames(typeof(bltmd.frontend)) == (:parameters, :reciprocallattice, :diagonal!, :system, :quadraticization, :H)
