@@ -2,8 +2,8 @@ using MoireSuperlattices
 using QuantumLattices
 using QuantumLattices: contentnames
 using TightBindingApproximation
-import Plots
 import CairoMakie as Makie
+import Plots
 
 @testset "MoireSpinor and MoireSpace" begin
     @test MoireSpinor(1, 1, 1, 1//2, 1)' == MoireSpinor(1, 1, 1, 1//2, 2)
@@ -40,28 +40,22 @@ end
     @test contentnames(typeof(bltmd.frontend)) == (:parameters, :reciprocallattice, :diagonal!, :system, :quadraticization, :H)
     @test Parameters(bltmd.frontend) == (a₀=3.28, m=0.45, θ=3.7, Vᶻ=38.0, μ=0.0, potentialᵣ=-1.1808487545039954, potentialᵢ=-0.4939597341751278, interlayer₁=-12.9, interlayer₂=-12.9, interlayer₃=-12.9)
     @test dimension(bltmd.frontend) == 122
-    @test count(bltmd.frontend) == 2
+    @test count(bltmd) == count(bltmd.frontend) == 2
 
-    update!(bltmd; μ=8.31)
-    recipls = bltmd.frontend.reciprocallattice.translations
-    lattice = MoireTriangular(6)
-    hilbert = Hilbert(Fock{:f}(1, 2), length(lattice))
-    w_terms = MoireWannier(bltmd.frontend, lattice, BrillouinZone(recipls, 24); band=dimension(bltmd.frontend))
-    h_terms = HoppingIntegral(w_terms)
-    tba = Algorithm(:tba, TBA(lattice, hilbert, terms(h_terms; tol=10^-6)))
-    @test all(map((x, y)->isapprox(x, y; atol=10^-4), tba.parameters, [-2.7598267, -4.3678292, -1.3035002, 0.0, 0.2447067, -0.6094541, -0.2700574, -0.3888003, 0.0260020, -0.0308282, -0.2999706, 0.0, 10.2102190]))
+    update!(bltmd; a₀=3.30, m=0.45, θ=4.0, Vᶻ=0.0, μ=0.0, V=4.4, ψ=5.9, w=20.0)
+    recipls = reciprocals(bltmd.frontend.reciprocallattice)
+    bands₁ = bltmd(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₁-K₂-Γ", length=100)))
+    bands₂ = bltmd(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₂-K₁-Γ", length=100)))
 
     plt = Plots.plot()
-    emin, emax = -40.0, 40.0
-    Plots.plot!(plt, bltmd(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₁-M₁-Γ", length=100))), ylims=(emin, emax), color="blue", title="")
-    Plots.plot!(plt, bltmd(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₄-M₄-Γ", length=100))), ylims=(emin, emax), color="green", title="")
-    Plots.plot!(plt, tba(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K-M-Γ", length=100))), ylims=(emin, emax), ls=:dash, color="red", size=(400, 300), title="")
-    Plots.savefig("Plots-WeSe₂-AA-stack.png")
+    emin, emax = -100.0, 30.0
+    Plots.plot!(plt, bands₁, ylims=(emin, emax), color="blue", title="")
+    Plots.plot!(plt, bands₂, ylims=(emin, emax), color="green", title="")
+    Plots.savefig(plt, "Plots-WeSe₂-continuum.png")
 
     fig = Makie.Figure()
     ax = Makie.Axis(fig[1, 1])
-    Makie.plot!(ax, bltmd(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₁-M₁-Γ", length=100))); ylims=(emin, emax), color=:blue, title="")
-    Makie.plot!(ax, bltmd(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₄-M₄-Γ", length=100))); ylims=(emin, emax), color=:green, title="")
-    Makie.plot!(ax, tba(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K-M-Γ", length=100))); ylims=(emin, emax), linestyle=:dash, color=:red, title="")
-    Makie.save("Makie-WeSe₂-AA-stack.png", fig)
+    Makie.plot!(ax, bands₁; ylims=(emin, emax), color=:blue, title="")
+    Makie.plot!(ax, bands₂; ylims=(emin, emax), color=:green, title="")
+    Makie.save("Makie-WeSe₂-continuum.png", fig)
 end

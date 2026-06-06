@@ -94,6 +94,7 @@ end
     end
     return result
 end
+@inline Base.count(moire::Algorithm{<:MoireSystem}) = count(moire.frontend)
 
 """
     BLTMD{

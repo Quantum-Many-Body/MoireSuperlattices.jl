@@ -2,8 +2,8 @@ using MoireSuperlattices
 using QuantumLattices
 using QuantumLattices: getcontent
 using StaticArrays: SVector
-import Plots
 import CairoMakie as Makie
+import Plots
 
 @testset "CommensurateBilayerHoneycomb" begin
     moire = CommensurateBilayerHoneycomb((20, 3); stack=:AB, center=:carbon)
@@ -50,6 +50,7 @@ end
     @test getcontent(lattice, :vectors) == []
     @test PointGroup(lattice) == PointGroup(typeof(lattice)) == C₆()
     @test truncation(lattice) == 4
+    @test reciprocals(lattice) == lattice.translations
     @test lattice.Γ ≈ SVector(2π/√3, 0.0) atol=1e-12
     @test lattice.K₊ ≈ SVector(0.0, 2π/3) atol=1e-12
     @test lattice.K₋ ≈ SVector(0.0, -2π/3) atol=1e-12

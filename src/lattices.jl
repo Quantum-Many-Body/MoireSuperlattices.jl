@@ -177,9 +177,16 @@ Get the point group of a Moire reciprocal lattice from an instance or type.
 """
     truncation(lattice::MoireReciprocalLattice) -> Int
 
-Get the truncation (number of shells) of a Moire reciprocal superlattice.
+Get the truncation (number of shells) of a Moire reciprocal lattice.
 """
 @inline truncation(lattice::MoireReciprocalLattice) = lattice.truncation
+
+"""
+    reciprocals(lattice::MoireReciprocalLattice) -> SVector{2, SVector{2, scalartype(lattice)}}
+
+Get the reciprocal translation vectors of a Moire reciprocal lattice.
+"""
+@inline reciprocals(lattice::MoireReciprocalLattice) = lattice.translations
 
 """
     MoireTriangularReciprocal{T<:Number} <: MoireReciprocalLattice{C₆, T}
