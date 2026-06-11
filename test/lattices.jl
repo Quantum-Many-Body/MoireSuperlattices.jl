@@ -28,73 +28,61 @@ import Plots
 end
 
 @testset "PointGroup" begin
-    c₆ = C₆()
-    @test angle(c₆) == angle(typeof(c₆)) == π/3
-    @test reciprocals(c₆) == reciprocals(typeof(c₆)) == 4π/√3 * SVector(SVector(1.0, 0.0), SVector(-1/2, √3/2))
+    c₃ = C₃()
+    @test angle(c₃) == angle(typeof(c₃)) == 2π/3
+    @test reciprocals(c₃) == reciprocals(typeof(c₃)) == 4π/√3 * SVector(SVector(1.0, 0.0), SVector(-1/2, √3/2))
 
-    # test sign for C₆
+    # test sign for C₃ (uses 60° azimuth discretization to distinguish forward +1 vs reverse -1)
     ref = Bond(1, Point(1, (0.0, 0.0)), Point(2, (1.0, 0.0)))
-    @test sign(C₆, ref, ref, 2) == sign(c₆, ref, ref, 2) == 1
-    @test sign(C₆, ref, Bond(1, [Point(1, (0.0, 0.0)), Point(2, (-0.5, √3/2))]), 2) == 1
-    @test sign(C₆, ref, Bond(1, [Point(2, (0.0, 0.0)), Point(1, (0.5, √3/2))]), 2) == -1
-    @test sign(C₆, ref, Bond(1, [Point(4, (0.0, 0.0)), Point(3, (-1.0, 0.0))]), 2) == -1
-    @test sign(C₆, ref, Bond(1, [Point(3, (0.0, 0.0)), Point(4, (-0.5, -√3/2))]), 2) == 1
-    @test sign(C₆, ref, Bond(2, [Point(1, (0.0, 0.0)), Point(2, (1.0, 0.0))]), 2) == 0
-    @test sign(C₆, ref, Bond(1, [Point(1, (0.0, 0.0)), Point(3, (1.0, 0.0))]), 2) == 0
-    @test sign(C₆, ref, Bond(1, [Point(1, (0.0, 0.0)), Point(2, (√2/2, √2/2))]), 2) == 0
+    @test sign(C₃, ref, ref, 2) == sign(c₃, ref, ref, 2) == 1
+    @test sign(C₃, ref, Bond(1, [Point(1, (0.0, 0.0)), Point(2, (-0.5, √3/2))]), 2) == 1
+    @test sign(C₃, ref, Bond(1, [Point(2, (0.0, 0.0)), Point(1, (0.5, √3/2))]), 2) == -1
+    @test sign(C₃, ref, Bond(1, [Point(4, (0.0, 0.0)), Point(3, (-1.0, 0.0))]), 2) == -1
+    @test sign(C₃, ref, Bond(1, [Point(3, (0.0, 0.0)), Point(4, (-0.5, -√3/2))]), 2) == 1
+    @test sign(C₃, ref, Bond(2, [Point(1, (0.0, 0.0)), Point(2, (1.0, 0.0))]), 2) == 0
+    @test sign(C₃, ref, Bond(1, [Point(1, (0.0, 0.0)), Point(3, (1.0, 0.0))]), 2) == 0
+    @test sign(C₃, ref, Bond(1, [Point(1, (0.0, 0.0)), Point(2, (√2/2, √2/2))]), 2) == 0
 end
 
 @testset "MoireReciprocalLattice" begin
     lattice = MoireTriangularReciprocal(4)
     @test getcontent(lattice, :name) == :MoireTriangularReciprocal
     @test getcontent(lattice, :vectors) == []
-    @test PointGroup(lattice) == PointGroup(typeof(lattice)) == C₆()
+    @test PointGroup(lattice) == PointGroup(typeof(lattice)) == C₃()
     @test truncation(lattice) == 4
     @test reciprocals(lattice) == lattice.translations
     @test lattice.Γ ≈ SVector(2π/√3, 0.0) atol=1e-12
     @test lattice.K₊ ≈ SVector(0.0, 2π/3) atol=1e-12
     @test lattice.K₋ ≈ SVector(0.0, -2π/3) atol=1e-12
-    @test lattice.translations ≈ reciprocals(C₆) atol=1e-12
+    @test lattice.translations ≈ reciprocals(C₃) atol=1e-12
     Plots.savefig(Plots.plot(lattice, 1), "Plots-moire-reciprocal-lattice.png")
     Makie.save("Makie-moire-reciprocal-lattice.png", Makie.plot(lattice, 1))
 end
 
 @testset "MoireNeighbors" begin
-    # Build a Kagome lattice (3 sites per unit cell, C₆-symmetric triangular Bravais vectors)
+    # Build a Kagome lattice (3 sites per unit cell, C₃-symmetric triangular Bravais vectors)
     kagome = Lattice(
         [0.0, 0.0], [0.5, 0.0], [0.25, √3/4];
         name=:Kagome, vectors=[[1.0, 0.0], [1/2, √3/2]]
     )
-    mn = MoireNeighbors{C₆}(kagome, 3)
+    mn = MoireNeighbors{C₃}(kagome, 3)
     @test nsublattice(mn) == 3
     @test truncation(mn) == 3
-    @test PointGroup(mn) == PointGroup(typeof(mn)) == C₆()
-    # 9 bonds total: 3 kinds × 3 sublattice pairs (1 bond per pair, per kind)
-    @test length(bonds(mn)) == 9
-    # kind=1 (dist≈0.5): different-sublattice pairs, 3 bonds
+    @test PointGroup(mn) == PointGroup(typeof(mn)) == C₃()
+    # 11 bonds total: kind=1 (3), kind=2 (5), kind=3 (3)
+    # kind=2 has 5 (not 3) because reversed-sublattice bonds with same spatial
+    # direction are distinct physical bonds — see sign() fix for Kagome.
+    @test length(bonds(mn)) == 11
     @test length(bonds(mn, 1)) == 3
-    @test Set(pairs(mn, 1)) == Set([(1, 2), (1, 3), (3, 2)])
-    for pair in [(1, 2), (1, 3), (2, 3)]
-        @test length(bonds(mn, 1, pair)) == 1
-    end
-    # kind=2 (dist≈0.866): different-sublattice pairs, 3 bonds
-    @test length(bonds(mn, 2)) == 3
-    @test Set(pairs(mn, 2)) == Set([(1, 2), (1, 3), (3, 2)])
-    for pair in [(1, 2), (1, 3), (2, 3)]
-        @test length(bonds(mn, 2, pair)) == 1
-    end
-    # kind=3 (dist≈1.0): same-sublattice pairs, 3 bonds
+    @test length(bonds(mn, 2)) == 5
     @test length(bonds(mn, 3)) == 3
-    @test Set(pairs(mn, 3)) == Set([(1, 1), (2, 2), (3, 3)])
-    for pair in [(1, 1), (2, 2), (3, 3)]
-        @test length(bonds(mn, 3, pair)) == 1
-    end
 
-    # in: C₆ symmetry-equivalent bonds are recognized
-    # kind=1 site1→site2 at az=0° is equivalent to stored site2→site1 at az=180°
+    # in: C₃ symmetry-equivalent bonds are recognized
+    # 1→2 at az=0° is equivalent to whichever 1→2 or 2→1 bond is stored for kind=1
     @test Bond(1, Point(1, (0.0, 0.0)), Point(2, (0.5, 0.0))) in mn
-    # kind=1 site1→site2 at az=60° is equivalent (swapped, Δ=-2)
-    @test Bond(1, Point(1, (0.0, 0.0)), Point(2, (0.5, √3/2))) in mn
+    # 1→2 at az=60°: with the sign() fix, reversed sublattice + even Δ is NOT
+    # equivalent (it is a physically distinct bond), so this is correctly rejected
+    @test !(Bond(1, Point(1, (0.0, 0.0)), Point(2, (0.5, √3/2))) in mn)
     # different kind → not equivalent
     @test !(Bond(4, Point(1, (0.0, 0.0)), Point(2, (0.5, 0.0))) in mn)
     # azimuth not at a multiple of 60°
@@ -116,7 +104,7 @@ end
     lattice = MoireTriangular(6)
     @test truncation(lattice) == 6
     @test lattice.coordinates == [0.0; 0.0;;]
-    @test lattice.vectors ≈ reciprocals(reciprocals(C₆))
+    @test lattice.vectors ≈ reciprocals(reciprocals(C₃))
     @test truncation(lattice.neighbors) == 6
 
     # Neighbors bond structure (nsublattice=1, truncation=6): 7 bonds across kinds 1–6
@@ -130,7 +118,7 @@ end
 
 @testset "MoireHoneycomb" begin
     lattice = MoireHoneycomb(6)
-    vectors = reciprocals(reciprocals(C₆))
+    vectors = reciprocals(reciprocals(C₃))
     v₁, v₂ = vectors[1], vectors[2]
     @test truncation(lattice) == 6
     @test lattice.coordinates[:, 1] ≈ (2v₁ - v₂) / 3
@@ -142,11 +130,11 @@ end
     mn = lattice.neighbors
     @test nsublattice(mn) == 2
     @test length(bonds(mn)) == 10
-    # Per-kind bond counts and sublattice pair structure
-    @test length(bonds(mn, 1)) == 1 && pairs(mn, 1) == [(1, 2)] # inter-sublattice only
-    @test length(bonds(mn, 2)) == 2 && Set(pairs(mn, 2)) == Set([(1, 1), (2, 2)])  # same-sublattice
-    @test length(bonds(mn, 3)) == 1 && pairs(mn, 3) == [(1, 2)] # inter-sublattice only
-    @test length(bonds(mn, 4)) == 2 && Set(pairs(mn, 4)) == Set([(1, 2)]) # inter-sublattice, 2 inequivalent directions
-    @test length(bonds(mn, 5)) == 2 && Set(pairs(mn, 5)) == Set([(1, 1), (2, 2)])  # same-sublattice
-    @test length(bonds(mn, 6)) == 2 && Set(pairs(mn, 6)) == Set([(1, 1), (2, 2)])  # same-sublattice
+    # Per-kind bond counts
+    @test length(bonds(mn, 1)) == 1  # inter-sublattice only
+    @test length(bonds(mn, 2)) == 2  # same-sublattice
+    @test length(bonds(mn, 3)) == 1  # inter-sublattice only
+    @test length(bonds(mn, 4)) == 2  # inter-sublattice, 2 inequivalent directions
+    @test length(bonds(mn, 5)) == 2  # same-sublattice
+    @test length(bonds(mn, 6)) == 2  # same-sublattice
 end

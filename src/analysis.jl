@@ -61,7 +61,7 @@ Forward to the wrapped [`MoireSystem`](@ref) frontend.
 """
     MoireWannier(moiresystem::MoireSystem, lattice::MoireSuperlattice; nk=24, kwargs...)
 
-Convenience constructor that auto-generates a [`BrillouinZone`](@ref) with `nk` k-points per dimension from `lattice` and delegates to the full constructor.
+Convenience constructor that auto-generates a `BrillouinZone` with `nk` k-points per dimension from `lattice` and delegates to the full constructor.
 """
 @inline function MoireWannier(moiresystem::MoireSystem, lattice::MoireSuperlattice; nk=24, kwargs...)
     recipls = reciprocals(lattice)
@@ -413,25 +413,25 @@ struct OnsiteAmplitude <: Function
 end
 function (amp::OnsiteAmplitude)(bond::Bond)
     bond.kind == 0 || return 0
-    return ((bond[1].site - 1) % amp.nsublattice + 1 == amp.sublattice) ? 1 : 0
+    return Sublattice(amp.nsublattice)(bond[1].site) == amp.sublattice ? 1 : 0
 end
 
 """
     terms(hopping::HoppingIntegral; order::Int=truncation(hopping.wannier.lattice), ismodulatable::Bool=true, tol=atol) -> Tuple{Vararg{Term}}
 
-Generate spin-independent and spin-orbital-coupling [`Hopping`](@ref) terms from a [`HoppingIntegral`](@ref).
+Generate spin-independent and spin-orbital-coupling `Hopping` terms from a [`HoppingIntegral`](@ref).
 
 ## Algorithm
 
-1. **Per-pair extraction** — For each neighbor order ``k`` and each sublattice pair ``(i, j)``, the coefficient ``t + iλ = hopping(R)[i,j]`` is extracted for every bond in the pair. Within a sublattice pair, ``t`` and ``|λ|`` must be consistent (asserted).
+1. **Per-bond extraction** — For each neighbor order ``k``, the coefficient ``t + iλ = hopping(R)[i,j]`` is extracted for each symmetry-inequivalent bond independently. Each bond stored in [`MoireNeighbors`](@ref) is already inequivalent under the prescribed point group, so no within-group consistency assertion is needed.
 
 2. **Grouping** — Entries are grouped by ``(t, |λ|)``: ``t`` must match exactly (including sign), ``λ`` by magnitude. Relative signs between grouped ``λ`` values are precomputed.
 
 3. **Term construction** — Each group yields two terms:
-   - `t` → [`Hopping`](@ref) with [`SublatticeAmplitude`](@ref) for sublattice matching.
-   - `λ` → [`Hopping`](@ref) with ``σᶻ`` coupling and [`SpinOrbitalCouplingAmplitude`](@ref) for spatial + sublattice matching.
+   - `t` → `Hopping` with [`SublatticeAmplitude`](@ref) for sublattice matching.
+   - `λ` → `Hopping` with ``σᶻ`` coupling and [`SpinOrbitalCouplingAmplitude`](@ref) for spatial + sublattice matching.
 
-4. **Onsite** — Diagonal ``hopping(0)[i, i]`` → [`Onsite`](@ref) chemical potentials.
+4. **Onsite** — Diagonal ``hopping(0)[i, i]`` → `Onsite` chemical potentials.
 
 ## Naming
 
@@ -443,23 +443,17 @@ function terms(hopping::HoppingIntegral; order::Int=truncation(hopping.wannier.l
     B = eltype(bonds(lattice.neighbors))
     DataEntry = @NamedTuple{t::Float64, λ::Float64, bond::B}
     GroupEntry = @NamedTuple{t::Float64, λ::Float64, signs::Vector{Int}, bonds::Vector{B}}
-    # P1: extract and validate per pair, collect flat data
+    # P1: extract per-bond coefficients (each bond is symmetry-inequivalent by construction)
     shells = Vector{Vector{GroupEntry}}(undef, order)
+    sl = Sublattice(nsublattice(lattice.neighbors))
     for k in 1:order
         data = DataEntry[]
-        for pair in pairs(lattice.neighbors, k)
-            bonds_kp = bonds(lattice.neighbors, k, pair)
-            coeffs = [hopping(icoordinate(bond))[pair...] for bond in bonds_kp]
-            ts, λs = real.(coeffs), imag.(coeffs)
-            tref, λref = first(ts), abs(first(λs))
-            for (t, λ) in zip(ts, λs)
-                @assert isapprox(t, tref; atol=tol) "terms error: t mismatch for pair $pair in shell $k."
-                @assert isapprox(abs(λ), λref; atol=tol) "terms error: |λ| mismatch for pair $pair in shell $k."
-            end
-            isapprox(tref, 0; atol=tol) && isapprox(λref, 0; atol=tol) && continue
-            for (t, λ, bond) in zip(ts, λs, bonds_kp)
-                push!(data, (t=t, λ=λ, bond=bond))
-            end
+        for bond in bonds(lattice.neighbors, k)
+            i, j = sl(bond[1].site), sl(bond[2].site)
+            coeff = hopping(icoordinate(bond))[i, j]
+            t, λ = real(coeff), imag(coeff)
+            isapprox(t, 0; atol=tol) && isapprox(λ, 0; atol=tol) && continue
+            push!(data, (t=t, λ=λ, bond=bond))
         end
         # P2: group by (t, |λ|)
         groups = GroupEntry[]
@@ -480,7 +474,6 @@ function terms(hopping::HoppingIntegral; order::Int=truncation(hopping.wannier.l
     # P3: generate Hopping terms
     G = typeof(PointGroup(lattice))
     nband = size(hopping.wannier.energies, 1)
-    nsub = nsublattice(lattice.neighbors)
     hoppings = map(enumerate(shells)) do (k, groups)
         result = Term[]
         for group in groups
@@ -489,20 +482,20 @@ function terms(hopping::HoppingIntegral; order::Int=truncation(hopping.wannier.l
             if length(groups) > 1
                 pairs = String[]
                 for bond in refs
-                    i = join('₀'+d for d in reverse(digits((bond[1].site - 1) % nsub + 1)))
-                    j = join('₀'+d for d in reverse(digits((bond[2].site - 1) % nsub + 1)))
+                    i = join('₀'+d for d in reverse(digits(sl(bond[1].site))))
+                    j = join('₀'+d for d in reverse(digits(sl(bond[2].site))))
                     push!(pairs, string(i, '₋', j))
                 end
                 suffix *= string('₍', join(unique!(pairs), '₊'), '₎')
             end
             push!(result, Hopping(
                 Symbol("t", suffix), group.t, k;
-                amplitude=SublatticeAmplitude{G}(refs, nsub),
+                amplitude=SublatticeAmplitude{G}(refs, sl.nsublattice),
                 ismodulatable=ismodulatable
             ))
             push!(result, Hopping(
                 Symbol("λ", suffix), group.λ, k, 𝕔⁺𝕔(:, :, σᶻ);
-                amplitude=SpinOrbitalCouplingAmplitude{G}(Tuple(group.signs), refs, nsub),
+                amplitude=SpinOrbitalCouplingAmplitude{G}(Tuple(group.signs), refs, sl.nsublattice),
                 ismodulatable=ismodulatable
             ))
         end
@@ -517,7 +510,7 @@ function terms(hopping::HoppingIntegral; order::Int=truncation(hopping.wannier.l
     else
         for (i, μ) in enumerate(μs)
             name = Symbol("μ", join('₀'+d for d in reverse(digits(i))))
-            push!(onsites, Onsite(name, μ; amplitude=OnsiteAmplitude(i, nsub), ismodulatable=ismodulatable))
+            push!(onsites, Onsite(name, μ; amplitude=OnsiteAmplitude(i, sl.nsublattice), ismodulatable=ismodulatable))
         end
     end
     return (concatenate(hoppings...)..., onsites...)
@@ -532,13 +525,13 @@ Generate Coulomb interaction terms from a [`CoulombIntegral`](@ref).
 
 ## Algorithm
 
-1. **Per-pair extraction** — For each neighbor order ``k`` and each sublattice pair ``(i, j)``, the coefficient ``V = coulomb(R, potential)[i, j]`` is extracted for every bond in the pair. Within a sublattice pair, ``V`` must be consistent (asserted).
+1. **Per-bond extraction** — For each neighbor order ``k``, the coefficient ``V = coulomb(R, potential)[i, j]`` is extracted for each symmetry-inequivalent bond independently. Each bond stored in [`MoireNeighbors`](@ref) is already inequivalent under the prescribed point group, so no within-group consistency assertion is needed.
 
 2. **Grouping** — Entries are grouped by ``V`` value across all pairs in the same shell.
 
-3. **Term construction** — Each group yields a [`Coulomb`](@ref) term with [`SublatticeAmplitude`](@ref) for sublattice matching. Coulomb interaction is purely real, so there is no spin-orbital-coupling counterpart. Parameter names use ``V`` prefix (e.g., `V₁`, `V₂`).
+3. **Term construction** — Each group yields a `Coulomb` term with [`SublatticeAmplitude`](@ref) for sublattice matching. Coulomb interaction is purely real, so there is no spin-orbital-coupling counterpart. Parameter names use ``V`` prefix (e.g., `V₁`, `V₂`).
 
-4. **Onsite** — Diagonal ``coulomb(0, potential)[i, i]`` → [`Hubbard`](@ref) onsite repulsion with ``U`` prefix.
+4. **Onsite** — Diagonal ``coulomb(0, potential)[i, i]`` → `Hubbard` onsite repulsion with ``U`` prefix.
 
 ## Naming
 
@@ -551,21 +544,16 @@ function terms(coulomb::CoulombIntegral, potential=BareCoulomb(1.0); order::Int=
     B = eltype(bonds(lattice.neighbors))
     DataEntry = @NamedTuple{V::Float64, bond::B}
     GroupEntry = @NamedTuple{V::Float64, bonds::Vector{B}}
-    # P1: extract and validate per pair, collect flat data (R > 0)
+    # P1: extract per-bond coefficients (R > 0)
     shells = Vector{Vector{GroupEntry}}(undef, order)
+    sl = Sublattice(nsublattice(lattice.neighbors))
     for k in 1:order
         data = DataEntry[]
-        for pair in pairs(lattice.neighbors, k)
-            bonds_kp = bonds(lattice.neighbors, k, pair)
-            Vs = [coulomb(icoordinate(bond), potential)[pair...] for bond in bonds_kp]
-            Vref = first(Vs)
-            for V in Vs
-                @assert isapprox(V, Vref; atol=tol) "terms error: V mismatch for pair $pair in shell $k."
-            end
-            isapprox(Vref, 0; atol=tol) && continue
-            for (V, bond) in zip(Vs, bonds_kp)
-                push!(data, (V=V, bond=bond))
-            end
+        for bond in bonds(lattice.neighbors, k)
+            i, j = sl(bond[1].site), sl(bond[2].site)
+            V = coulomb(icoordinate(bond), potential)[i, j]
+            isapprox(V, 0; atol=tol) && continue
+            push!(data, (V=V, bond=bond))
         end
         # P2: group by V value
         groups = GroupEntry[]
@@ -585,7 +573,6 @@ function terms(coulomb::CoulombIntegral, potential=BareCoulomb(1.0); order::Int=
     # P3: generate Coulomb terms (R > 0)
     G = typeof(PointGroup(lattice))
     nband = size(coulomb.wannier.energies, 1)
-    nsub = nsublattice(lattice.neighbors)
     coulombs = map(enumerate(shells)) do (k, groups)
         result = Term[]
         for group in groups
@@ -594,15 +581,15 @@ function terms(coulomb::CoulombIntegral, potential=BareCoulomb(1.0); order::Int=
             if length(groups) > 1
                 pairs = String[]
                 for bond in refs
-                    i = join('₀'+d for d in reverse(digits((bond[1].site - 1) % nsub + 1)))
-                    j = join('₀'+d for d in reverse(digits((bond[2].site - 1) % nsub + 1)))
+                    i = join('₀'+d for d in reverse(digits(sl(bond[1].site))))
+                    j = join('₀'+d for d in reverse(digits(sl(bond[2].site))))
                     push!(pairs, string(i, '₋', j))
                 end
                 suffix *= string('₍', join(unique!(pairs), '₊'), '₎')
             end
             push!(result, Coulomb(
                 Symbol("V", suffix), group.V, k;
-                amplitude=SublatticeAmplitude{G}(refs, nsub),
+                amplitude=SublatticeAmplitude{G}(refs, sl.nsublattice),
                 ismodulatable=ismodulatable
             ))
         end
@@ -617,7 +604,7 @@ function terms(coulomb::CoulombIntegral, potential=BareCoulomb(1.0); order::Int=
     else
         for (i, U) in enumerate(Us)
             name = Symbol("U", join('₀'+d for d in reverse(digits(i))))
-            push!(hubbards, Hubbard(name, U; amplitude=OnsiteAmplitude(i, nsub), ismodulatable=ismodulatable))
+            push!(hubbards, Hubbard(name, U; amplitude=OnsiteAmplitude(i, sl.nsublattice), ismodulatable=ismodulatable))
         end
     end
     return (hubbards..., concatenate(coulombs...)...)

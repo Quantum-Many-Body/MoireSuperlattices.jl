@@ -81,6 +81,17 @@ The total number of atoms in the unitcell of the Moire superlattice is 4 times t
     end
 end
 
+#=== sublattice ===#
+"""
+    Sublattice(nsublattice::Int)
+
+Callable that maps a lattice site index to its 1-based sublattice: `(site - 1) % nsublattice + 1`.
+"""
+struct Sublattice
+    nsublattice::Int
+end
+@inline (s::Sublattice)(site::Int) = (site - 1) % s.nsublattice + 1
+
 #=== point group symmetries and generic methods ===#
 """
     PointGroup
@@ -101,30 +112,16 @@ Fundamental rotation angle of the point group in radians.
     sign(::Type{G}, ref::Bond, bond::Bond, nsublattice::Int; atol::Real=atol) where {G<:PointGroup} -> Int
     sign(sym::PointGroup, ref::Bond, bond::Bond, nsublattice::Int; atol::Real=atol) -> Int
 
-Unified bond equivalence check under point group `G`.
+Bond equivalence check under the point group `G`.
 
-Two bonds are equivalent when all three conditions hold:
-1. Same neighbor order: `ref.kind == bond.kind`.
-2. Same spatial orientation modulo the fundamental rotation angle of `G`.
-3. Same unordered sublattice pair `{i, j}` modulo `nsublattice`.
-
-Returns:
-- `+1`: parallel and same pair (even number of fundamental rotations, ``Δ`` is even).
-- `-1`: antiparallel and same pair (odd number of fundamental rotations, ``Δ`` is odd).
+Each concrete `PointGroup` subtype must implement `Base.sign(::Type{G}, ref, bond, nsublattice)` returning:
+- `+1`: `bond` is symmetry-equivalent to `ref` in the forward direction.
+- `-1`: `bond` is symmetry-equivalent to the reverse of `ref`.
 - `0`: not equivalent.
+
+The instance method `sign(sym::PointGroup, ...)` dispatches to the type-specific implementation via `sign(typeof(sym), ...)`.
 """
 @inline Base.sign(sym::PointGroup, ref::Bond, bond::Bond, nsublattice::Int) = sign(typeof(sym), ref, bond, nsublattice)
-function Base.sign(::Type{G}, ref::Bond, bond::Bond, nsublattice::Int) where {G<:PointGroup}
-    ref.kind == bond.kind || return 0
-    rᵢ, rⱼ = ref[1].site % nsublattice, ref[2].site % nsublattice
-    bᵢ, bⱼ = bond[1].site % nsublattice, bond[2].site % nsublattice
-    ((rᵢ == bᵢ && rⱼ == bⱼ) || (rᵢ == bⱼ && rⱼ == bᵢ)) || return 0
-    α, θ, θ₀ = angle(G), azimuth(rcoordinate(bond)), azimuth(rcoordinate(ref))
-    Δ = (θ - θ₀) / α
-    Δ_int = round(Int, Δ)
-    isapprox(Δ, Δ_int; atol=atol) || return 0
-    return iseven(Δ_int) ? 1 : -1
-end
 
 """
     reciprocals(sym::PointGroup, [T=Float64]) -> SVector{2, SVector{2, T}}
@@ -134,15 +131,37 @@ Reciprocal-lattice translation vectors for the given point group.
 """
 @inline reciprocals(sym::PointGroup, ::Type{T}=Float64) where {T<:Number} = reciprocals(typeof(sym), T)
 
-#=== C₆ symmetry ===#
+#=== C₃ symmetry ===#
 """
-    C₆ <: PointGroup
+    C₃ <: PointGroup
 
-Six-fold rotation symmetry (60° fundamental angle, π/3 rad).
+Three-fold rotation symmetry (120° fundamental angle, 2π/3 rad).
+
+For bond equivalence classification, [`sign`](@ref) uses a 60° azimuth discretization to distinguish bonds that are C₃-equivalent in the forward direction (``Δ`` even → `+1`) from those that are C₃-equivalent in the reverse direction (``Δ`` odd → `-1`).
 """
-struct C₆ <: PointGroup end
-@inline Base.angle(::Type{C₆}) = π/3
-function reciprocals(::Type{C₆}, ::Type{T}=Float64) where {T<:Number}
+struct C₃ <: PointGroup end
+@inline Base.angle(::Type{C₃}) = 2π/3
+function Base.sign(::Type{C₃}, ref::Bond, bond::Bond, nsublattice::Int)
+    ref.kind == bond.kind || return 0
+    sl = Sublattice(nsublattice)
+    rᵢ, rⱼ = sl(ref[1].site), sl(ref[2].site)
+    bᵢ, bⱼ = sl(bond[1].site), sl(bond[2].site)
+    if rᵢ == bᵢ && rⱼ == bⱼ
+        reversed = false
+    elseif rᵢ == bⱼ && rⱼ == bᵢ
+        reversed = true
+    else
+        return 0
+    end
+    α, θ, θ₀ = angle(C₃)/2, azimuth(rcoordinate(bond)), azimuth(rcoordinate(ref))
+    Δ = (θ - θ₀) / α
+    Δ_int = round(Int, Δ)
+    isapprox(Δ, Δ_int; atol=atol) || return 0
+    # reversed sublattice + same spatial direction → distinct bonds, not equivalent
+    reversed && iseven(Δ_int) && return 0
+    return iseven(Δ_int) ? 1 : -1
+end
+function reciprocals(::Type{C₃}, ::Type{T}=Float64) where {T<:Number}
     b₀ = 4one(T)*π/√(3one(T))
     b₁ = SVector(one(T), zero(T)) * b₀
     b₂ = SVector(-one(T)/2, √(one(T)*3)/2) * b₀
@@ -150,11 +169,11 @@ function reciprocals(::Type{C₆}, ::Type{T}=Float64) where {T<:Number}
 end
 
 """
-    const C6 = C₆
+    const C3 = C₃
 
-ASCII alias for [`C₆`](@ref).
+ASCII alias for [`C₃`](@ref).
 """
-const C6 = C₆
+const C3 = C₃
 
 #=== MoireReciprocalLattice ===#
 """
@@ -189,11 +208,11 @@ Get the reciprocal translation vectors of a Moire reciprocal lattice.
 @inline reciprocals(lattice::MoireReciprocalLattice) = lattice.translations
 
 """
-    MoireTriangularReciprocal{T<:Number} <: MoireReciprocalLattice{C₆, T}
+    MoireTriangularReciprocal{T<:Number} <: MoireReciprocalLattice{C₃, T}
 
-C₆-symmetric Moire reciprocal lattice with truncation.
+C₃-symmetric Moire reciprocal lattice with truncation.
 """
-struct MoireTriangularReciprocal{T<:Number} <: MoireReciprocalLattice{C₆, T}
+struct MoireTriangularReciprocal{T<:Number} <: MoireReciprocalLattice{C₃, T}
     Γ::SVector{2, T}
     K₊::SVector{2, T}
     K₋::SVector{2, T}
@@ -201,7 +220,7 @@ struct MoireTriangularReciprocal{T<:Number} <: MoireReciprocalLattice{C₆, T}
     coordinates::Matrix{T}
     truncation::Int
     function MoireTriangularReciprocal(truncation::Int, ::Type{T}=Float64) where {T<:Number}
-        b₁, b₂ = reciprocals(C₆, T)
+        b₁, b₂ = reciprocals(C₃, T)
         Γ = b₁ / 2
         K₊ = (b₁ + 2b₂) / 6
         K₋ = -K₊
@@ -220,9 +239,9 @@ end
 """
     MoireNeighbors{G<:PointGroup, D<:Number}
 
-Flat collection of symmetry-inequivalent [`Bond`](@ref) objects under point group `G`.
+Flat collection of symmetry-inequivalent `Bond` objects under point group `G`.
 
-Use [`bonds`](@ref) and [`pairs`](@ref) to query by neighbor order and sublattice pair.
+Use [`bonds`](@ref) to query by neighbor order.
 """
 struct MoireNeighbors{G<:PointGroup, D<:Number}
     bonds::Vector{Bond{Int, Point{2, D}, SVector{2, Point{2, D}}}}
@@ -278,42 +297,11 @@ Get the point group of MoireNeighbors from an instance or type.
 """
     bonds(neighbors::MoireNeighbors) -> Vector{<:Bond}
     bonds(neighbors::MoireNeighbors, k::Int) -> Vector{<:Bond}
-    bonds(neighbors::MoireNeighbors, k::Int, pair::Tuple{Int, Int}) -> Vector{<:Bond}
 
-Three-level bond access: all bonds, by neighbor order `k`, or by `(k, pair)`.
-
-Here, `pair` is 1-based ``(i, j)`` unordered sublattice indices.
+Bond access: all stored inequivalent bonds, or filtered by neighbor order `k`.
 """
 @inline bonds(neighbors::MoireNeighbors) = neighbors.bonds
 @inline bonds(neighbors::MoireNeighbors, k::Int) = [bond for bond in neighbors.bonds if bond.kind == k]
-function bonds(neighbors::MoireNeighbors, k::Int, pair::Tuple{Int, Int})
-    i, j = pair
-    n = neighbors.nsublattice
-    return [bond for bond in neighbors.bonds if bond.kind == k && (bond[1].site%n+1, bond[2].site%n+1) in ((i, j), (j, i))]
-end
-
-"""
-    pairs(neighbors::MoireNeighbors, k::Int) -> Vector{Tuple{Int, Int}}
-
-All 1-based directed sublattice pairs ``(i, j)`` present in neighbor order `k`.
-
-The pair direction matches the bond direction as stored in ``neighbors.bonds``:
-``i`` is the "from" sublattice, ``j`` is the "to" sublattice.
-"""
-function Base.pairs(neighbors::MoireNeighbors, k::Int)
-    seen = Set{Tuple{Int, Int}}()
-    result = Tuple{Int, Int}[]
-    n = neighbors.nsublattice
-    for bond in neighbors.bonds
-        bond.kind == k || continue
-        p = (bond[1].site % n + 1, bond[2].site % n + 1)
-        p in seen || begin
-            push!(seen, p)
-            push!(result, p)
-        end
-    end
-    return result
-end
 
 """
     in(bond::Bond, neighbors::MoireNeighbors) -> Bool
@@ -361,14 +349,14 @@ Get the truncation (number of shells) of a Moire superlattice.
 @inline truncation(lattice::MoireSuperlattice) = truncation(lattice.neighbors)
 
 """
-    MoireTriangular{D<:Number} <: MoireSuperlattice{C₆, D}
+    MoireTriangular{D<:Number} <: MoireSuperlattice{C₃, D}
 
 Emergent triangular superlattice in Moire systems.
 """
-struct MoireTriangular{D<:Number} <: MoireSuperlattice{C₆, D}
+struct MoireTriangular{D<:Number} <: MoireSuperlattice{C₃, D}
     coordinates::Matrix{D}
     vectors::SVector{2, SVector{2, D}}
-    neighbors::MoireNeighbors{C₆, D}
+    neighbors::MoireNeighbors{C₃, D}
 end
 @inline getcontent(::MoireTriangular, ::Val{:name}) = :MoireTriangular
 
@@ -378,21 +366,21 @@ end
 Construct with coordinate type `T`. The single site per unitcell is at the origin (MM stacking site).
 """
 function MoireTriangular(truncation::Int, ::Type{T}=Float64) where {T<:Number}
-    vectors = reciprocals(reciprocals(C₆, T))
+    vectors = reciprocals(reciprocals(C₃, T))
     coordinates = zeros(T, 2, 1)
-    neighbors = MoireNeighbors{C₆}(Lattice(:MoireTriangular, coordinates, vectors), truncation)
+    neighbors = MoireNeighbors{C₃}(Lattice(:MoireTriangular, coordinates, vectors), truncation)
     return MoireTriangular(coordinates, vectors, neighbors)
 end
 
 """
-    MoireHoneycomb{D<:Number} <: MoireSuperlattice{C₆, D}
+    MoireHoneycomb{D<:Number} <: MoireSuperlattice{C₃, D}
 
 Emergent honeycomb superlattice in Moire systems, composed of MX and XM stacking sites.
 """
-struct MoireHoneycomb{D<:Number} <: MoireSuperlattice{C₆, D}
+struct MoireHoneycomb{D<:Number} <: MoireSuperlattice{C₃, D}
     coordinates::Matrix{D}
     vectors::SVector{2, SVector{2, D}}
-    neighbors::MoireNeighbors{C₆, D}
+    neighbors::MoireNeighbors{C₃, D}
 end
 @inline getcontent(::MoireHoneycomb, ::Val{:name}) = :MoireHoneycomb
 
@@ -402,11 +390,11 @@ end
 Construct with coordinate type `T`. XM at `(2v₁-v₂)/3`, MX at `(v₁+v₂)/3`.
 """
 function MoireHoneycomb(truncation::Int, ::Type{T}=Float64) where {T<:Number}
-    v₁, v₂ = reciprocals(reciprocals(C₆, T))
+    v₁, v₂ = reciprocals(reciprocals(C₃, T))
     coordinates = zeros(T, 2, 2)
     coordinates[:, 1] = (2v₁ - v₂) / 3
     coordinates[:, 2] = (v₁ + v₂) / 3
-    neighbors = MoireNeighbors{C₆}(Lattice(:MoireHoneycomb, coordinates, SVector(v₁, v₂)), truncation)
+    neighbors = MoireNeighbors{C₃}(Lattice(:MoireHoneycomb, coordinates, SVector(v₁, v₂)), truncation)
     return MoireHoneycomb(coordinates, SVector(v₁, v₂), neighbors)
 end
 
@@ -415,6 +403,6 @@ end
 
 A rectangular zone in real space.
 
-Alias for [`ReciprocalZone`](@ref) with the space-type parameter `K = :r`.
+Alias for `ReciprocalZone` with the space-type parameter `K = :r`.
 """
 const RealZone{N, S<:SVector, V<:Number} = ReciprocalZone{:r, N, S, V}
