@@ -73,13 +73,13 @@ end
     @test length(bonds(mn)) == 9
     # kind=1 (dist≈0.5): different-sublattice pairs, 3 bonds
     @test length(bonds(mn, 1)) == 3
-    @test Set(pairs(mn, 1)) == Set([(1, 2), (1, 3), (2, 3)])
+    @test Set(pairs(mn, 1)) == Set([(1, 2), (1, 3), (3, 2)])
     for pair in [(1, 2), (1, 3), (2, 3)]
         @test length(bonds(mn, 1, pair)) == 1
     end
     # kind=2 (dist≈0.866): different-sublattice pairs, 3 bonds
     @test length(bonds(mn, 2)) == 3
-    @test Set(pairs(mn, 2)) == Set([(1, 2), (1, 3), (2, 3)])
+    @test Set(pairs(mn, 2)) == Set([(1, 2), (1, 3), (3, 2)])
     for pair in [(1, 2), (1, 3), (2, 3)]
         @test length(bonds(mn, 2, pair)) == 1
     end
@@ -133,8 +133,8 @@ end
     vectors = reciprocals(reciprocals(C₆))
     v₁, v₂ = vectors[1], vectors[2]
     @test truncation(lattice) == 6
-    @test lattice.coordinates[:, 1] ≈ (v₁ .+ v₂) ./ 3
-    @test lattice.coordinates[:, 2] ≈ (2 .* v₁ .- v₂) ./ 3
+    @test lattice.coordinates[:, 1] ≈ (2v₁ - v₂) / 3
+    @test lattice.coordinates[:, 2] ≈ (v₁ + v₂) / 3
     @test lattice.vectors ≈ vectors
     @test truncation(lattice.neighbors) == 6
 

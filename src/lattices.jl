@@ -295,7 +295,10 @@ end
 """
     pairs(neighbors::MoireNeighbors, k::Int) -> Vector{Tuple{Int, Int}}
 
-All 1-based unordered sublattice pairs ``{i, j}`` present in neighbor order `k`.
+All 1-based directed sublattice pairs ``(i, j)`` present in neighbor order `k`.
+
+The pair direction matches the bond direction as stored in ``neighbors.bonds``:
+``i`` is the "from" sublattice, ``j`` is the "to" sublattice.
 """
 function Base.pairs(neighbors::MoireNeighbors, k::Int)
     seen = Set{Tuple{Int, Int}}()
@@ -304,10 +307,9 @@ function Base.pairs(neighbors::MoireNeighbors, k::Int)
     for bond in neighbors.bonds
         bond.kind == k || continue
         p = (bond[1].site % n + 1, bond[2].site % n + 1)
-        key = p[1] <= p[2] ? p : (p[2], p[1])
-        key in seen || begin
-            push!(seen, key)
-            push!(result, key)
+        p in seen || begin
+            push!(seen, p)
+            push!(result, p)
         end
     end
     return result
@@ -397,13 +399,13 @@ end
 """
     MoireHoneycomb(truncation::Int, [T=Float64])
 
-Construct with coordinate type `T`. MX at `(v₁+v₂)/3`, XM at `(2v₁-v₂)/3`.
+Construct with coordinate type `T`. XM at `(2v₁-v₂)/3`, MX at `(v₁+v₂)/3`.
 """
 function MoireHoneycomb(truncation::Int, ::Type{T}=Float64) where {T<:Number}
     v₁, v₂ = reciprocals(reciprocals(C₆, T))
     coordinates = zeros(T, 2, 2)
-    coordinates[:, 1] = (v₁ + v₂) / 3
-    coordinates[:, 2] = (2v₁ - v₂) / 3
+    coordinates[:, 1] = (2v₁ - v₂) / 3
+    coordinates[:, 2] = (v₁ + v₂) / 3
     neighbors = MoireNeighbors{C₆}(Lattice(:MoireHoneycomb, coordinates, SVector(v₁, v₂)), truncation)
     return MoireHoneycomb(coordinates, SVector(v₁, v₂), neighbors)
 end

@@ -98,7 +98,7 @@ function MoireWannier(moiresystem::MoireSystem, lattice::MoireTriangular, brillo
         for ig in 1:nG
             ψ_MM += bloch[1, ig, 1, ik]
         end
-        @assert abs(ψ_MM) > tol "MoireWannier error: wavefunction at r=0 is zero at k=$k; gauge fixing failed."
+        @assert abs(ψ_MM) > tol "MoireWannier error: wavefunction at r=0 is zero at k=$k; U(1) gauge fixing failed."
         U[1, 1, ik] = conj(ψ_MM) / abs(ψ_MM)
     end
     aₘ = moiresystem.parameters.a₀ / (2sind(moiresystem.parameters.θ/2))
@@ -107,102 +107,76 @@ function MoireWannier(moiresystem::MoireSystem, lattice::MoireTriangular, brillo
 end
 
 # === honeycomb constructor (nband=2, SU(2) + U(1) gauge fix) ===#
-# """
-#     MoireWannier(moiresystem::MoireSystem, lattice::MoireHoneycomb, brillouinzone::BrillouinZone; bands::UnitRange{Int})
+"""
+    MoireWannier(moiresystem::MoireSystem, lattice::MoireHoneycomb, brillouinzone::BrillouinZone; bands::UnitRange{Int}, tol::Real=atol)
 
-# Construct Wannier functions for a 2-band subspace on a honeycomb lattice.
+Construct Wannier functions for a 2-band subspace on a honeycomb lattice.
 
-# Steps:
-# 1. Extract raw Bloch states for the 2-band subspace
-# 2. SU(2) rotation: maximize layer polarization via diagonalizing layer projectors
-# 3. U(1) gauge fix: ψ̃₁(r_MX) real positive, ψ̃₂(r_XM) real positive
-# """
-# function MoireWannier(moiresystem::MoireSystem, lattice::MoireHoneycomb, brillouinzone::BrillouinZone; bands::UnitRange{Int})
-#     dim = dimension(moiresystem)
-#     nband = length(bands)
-#     @assert nband == 2 "MoireWannier error: honeycomb requires exactly 2 bands, got $nband."
-#     @assert all(b -> 1 <= b <= dim, bands) "MoireWannier error: band indices out of range [1, $dim]."
-#     nk = length(brillouinzone)
-#     nlayer = 2
-#     nG = dim ÷ nlayer
-#     # extract raw Bloch states and energies
-#     bloch = zeros(ComplexF64, nlayer, nG, nband, nk)
-#     energies = zeros(Float64, nband, nk)
-#     band_indices = collect(bands)
-#     for (ik, k) in enumerate(brillouinzone)
-#         eigensystem = eigen(moiresystem, k)
-#         for (ib, b) in enumerate(band_indices)
-#             energies[ib, ik] = eigensystem.values[b]
-#             bloch[:, :, ib, ik] .= reshape(eigensystem.vectors[:, b], nlayer, nG)
-#         end
-#     end
-#     # SU(2) rotation to maximize layer polarization
-#     U_tilde = zeros(ComplexF64, nband, nband, nk)
-#     _su2_layer_polarization!(U_tilde, bloch, nG, nlayer, nk)
-#     # U(1) gauge fix:
-#     # ψ̃₁ at r_MX (MX position, sublattice 1) → real positive
-#     # ψ̃₂ at r_XM (XM position, sublattice 2) → real positive
-#     # MX = coordinates[:, 1], XM = coordinates[:, 2] in the honeycomb lattice
-#     r_MX = SVector(lattice.coordinates[1, 1], lattice.coordinates[2, 1])
-#     r_XM = SVector(lattice.coordinates[1, 2], lattice.coordinates[2, 2])
-#     U = zeros(ComplexF64, nband, nband, nk)
-#     for ik in 1:nk
-#         k = SVector(brillouinzone[ik][1], brillouinzone[ik][2])
-#         psi1_MX = zero(ComplexF64)
-#         psi2_XM = zero(ComplexF64)
-#         for ig in 1:nG
-#             Gvec = SVector(moiresystem.reciprocallattice[ig][1], moiresystem.reciprocallattice[ig][2])
-#             phase_MX = cis(dot(k + Gvec, r_MX))
-#             phase_XM = cis(dot(k + Gvec, r_XM))
-#             for il in 1:nlayer
-#                 for ν in 1:nband
-#                     psi1_MX += bloch[il, ig, ν, ik] * U_tilde[ν, 1, ik] * phase_MX
-#                     psi2_XM += bloch[il, ig, ν, ik] * U_tilde[ν, 2, ik] * phase_XM
-#                 end
-#             end
-#         end
-#         @assert abs(psi1_MX) > atol "MoireWannier error: ψ̃₁(r_MX) is zero at k=$k; gauge fixing failed."
-#         @assert abs(psi2_XM) > atol "MoireWannier error: ψ̃₂(r_XM) is zero at k=$k; gauge fixing failed."
-#         phi1 = conj(psi1_MX) / abs(psi1_MX)
-#         phi2 = conj(psi2_XM) / abs(psi2_XM)
-#         # U(k) = Ũ(k) × diag(e^{iφ₁k}, e^{iφ₂k})
-#         # U[:, n, ik] = U_tilde[:, n, ik] * exp(-i*phi_n)  for each column n
-#         U[:, 1, ik] .= U_tilde[:, 1, ik] .* phi1
-#         U[:, 2, ik] .= U_tilde[:, 2, ik] .* phi2
-#     end
-#     aₘ = moiresystem.parameters.a₀ / (2sind(moiresystem.parameters.θ/2))
-#     reciprocallattice = getcontent(moiresystem, :reciprocallattice)
-#     return MoireWannier(aₘ, lattice, reciprocallattice, brillouinzone, energies, bloch, U)
-# end
-
-# """
-#     _su2_layer_polarization!(U_tilde, bloch, nG, nlayer, nk)
-
-# Compute the SU(2) rotation Ũ(k) at each k that maximizes layer polarization:
-# - Column 1: maximize bottom-layer projection ⟨P_b⟩
-# - Column 2: maximize top-layer projection  ⟨P_t⟩
-
-# P_b = diag(1, 0), P_t = diag(0, 1) acting on the layer index.
-# """
-# function _su2_layer_polarization!(U_tilde::Array{ComplexF64,3}, bloch::Array{ComplexF64,4}, nG::Int, nlayer::Int, nk::Int)
-#     @assert nlayer == 2 "SU(2) layer polarization requires 2 layers."
-#     for ik in 1:nk
-#         Pb = zeros(ComplexF64, 2, 2)
-#         for ig in 1:nG
-#             # bottom-layer component (layer=1) at G-vector ig
-#             for μ in 1:2, ν in 1:2
-#                 Pb[μ, ν] += bloch[1, ig, μ, ik] * conj(bloch[1, ig, ν, ik])
-#             end
-#         end
-#         # diagonalize Pb (2×2 Hermitian)
-#         vals, vecs = eigen(Hermitian(Pb))
-#         # sort: eigenvector for max eigenvalue → column 1 (maximizes bottom-layer weight)
-#         #        eigenvector for min eigenvalue → column 2 (maximizes top-layer weight, since Pb + Pt ≈ I)
-#         perm = sortperm(vals; rev=true)
-#         U_tilde[:, :, ik] .= vecs[:, perm]
-#     end
-#     return U_tilde
-# end
+Steps:
+1. Extract raw Bloch states for the 2-band subspace
+2. SU(2) rotation: maximize layer polarization via diagonalizing layer projectors
+3. U(1) gauge fix: ψ₁(r_XM) real positive (Wannier 1 at XM, bottom-layer), ψ₂(r_MX) real positive (Wannier 2 at MX, top-layer)
+"""
+function MoireWannier(moiresystem::MoireSystem, lattice::MoireHoneycomb, brillouinzone::BrillouinZone; bands::UnitRange{Int}, tol::Real=atol)
+    dim, nband = dimension(moiresystem), length(bands)
+    @assert nband == 2 "MoireWannier error: honeycomb requires exactly 2 bands, got $nband."
+    @assert all(band -> 1 <= band <= dim, bands) "MoireWannier error: band indices out of range [1, $dim]."
+    nlayer, nk = 2, length(brillouinzone)
+    nG = dim ÷ nlayer
+    # extract raw Bloch states and energies
+    energies = zeros(Float64, nband, nk)
+    bloch = zeros(ComplexF64, nlayer, nG, nband, nk)
+    for (ik, k) in enumerate(brillouinzone)
+        eigensystem = eigen(moiresystem, k)
+        for (ib, band) in enumerate(bands)
+            energies[ib, ik] = eigensystem.values[band]
+            bloch[:, :, ib, ik] .= reshape(eigensystem.vectors[:, band], nlayer, nG)
+        end
+    end
+    # SU(2) rotation to maximize layer polarization:
+    # Diagonalize top-layer projector P at each k, where P[μ, ν] = ⟨ψ_μ|[0 0; 1 0]|ψ_ν⟩ = Σ_G (ψ_μ(G))' * [0 0; 1 0] * ψ_ν(G)
+    Ũ = zeros(ComplexF64, nband, nband, nk)
+    for ik in 1:nk
+        P₁₁, P₂₂, P₁₂ = zero(ComplexF64), zero(ComplexF64), zero(ComplexF64)
+        for ig in 1:nG
+            P₁₁ += conj(bloch[2, ig, 1, ik]) * bloch[2, ig, 1, ik]
+            P₁₂ += conj(bloch[2, ig, 1, ik]) * bloch[2, ig, 2, ik]
+            P₂₂ += conj(bloch[2, ig, 2, ik]) * bloch[2, ig, 2, ik]
+        end
+        Ũ[:, :, ik] = eigvecs(Hermitian(SMatrix{2, 2}(P₁₁, conj(P₁₂), P₁₂, P₂₂)))
+    end
+    # U(1) gauge fix:
+    # W₁ (bottom-layer-dominant) → real positive at XM (lattice[1])
+    # W₂ (top-layer-dominant) → real positive at MX (lattice[2])
+    r_XM, r_MX= lattice[1], lattice[2]
+    U = zeros(ComplexF64, nband, nband, nk)
+    for (ik, k) in enumerate(brillouinzone)
+        ψ₁ = zero(ComplexF64)
+        ψ₂ = zero(ComplexF64)
+        for (ig, G) in enumerate(moiresystem.reciprocallattice)
+            phase_XM = cis(dot(k + G, r_XM))
+            phase_MX = cis(dot(k + G, r_MX))
+            # W₁: bottom-layer (il=1) component at XM
+            # W₂: top-layer (il=2) component at MX
+            for ν in 1:nband
+                ψ₁ += bloch[1, ig, ν, ik] * Ũ[ν, 1, ik] * phase_XM
+                ψ₂ += bloch[2, ig, ν, ik] * Ũ[ν, 2, ik] * phase_MX
+            end
+        end
+        @assert abs(ψ₁) > tol "MoireWannier error: ψ₁(r_XM) is zero at k=$k; U(1) gauge fixing failed."
+        @assert abs(ψ₂) > tol "MoireWannier error: ψ₂(r_MX) is zero at k=$k; U(1) gauge fixing failed."
+        φ₁ = conj(ψ₁) / abs(ψ₁)
+        φ₂ = conj(ψ₂) / abs(ψ₂)
+        # U(k) = Ũ(k) × diag(e^{-iφ₁}, e^{-iφ₂})
+        for ib in 1:nband
+            U[ib, 1, ik] = Ũ[ib, 1, ik] * φ₁
+            U[ib, 2, ik] = Ũ[ib, 2, ik] * φ₂
+        end
+    end
+    aₘ = moiresystem.parameters.a₀ / (2sind(moiresystem.parameters.θ/2))
+    reciprocallattice = getcontent(moiresystem, :reciprocallattice)
+    return MoireWannier(aₘ, lattice, reciprocallattice, brillouinzone, energies, bloch, U)
+end
 
 """
     HoppingIntegral{W<:MoireWannier}
@@ -231,7 +205,7 @@ function (hopping::HoppingIntegral)(R::AbstractVector{<:Number})
         for m in 1:nband, n in 1:nband
             acc = zero(ComplexF64)
             for i in 1:nband
-                acc += U[m, i] * ε[i] * conj(U[n, i])
+                acc += conj(U[i, m]) * ε[i] * U[i, n]
             end
             result[m, n] += phase * acc
         end
@@ -439,7 +413,7 @@ struct OnsiteAmplitude <: Function
 end
 function (amp::OnsiteAmplitude)(bond::Bond)
     bond.kind == 0 || return 0
-    return (bond[1].site % amp.nsublattice + 1 == amp.sublattice) ? 1 : 0
+    return ((bond[1].site - 1) % amp.nsublattice + 1 == amp.sublattice) ? 1 : 0
 end
 
 """
@@ -515,8 +489,8 @@ function terms(hopping::HoppingIntegral; order::Int=truncation(hopping.wannier.l
             if length(groups) > 1
                 pairs = String[]
                 for bond in refs
-                    i = join('₀'+d for d in reverse(digits(bond[1].site % nsub + 1)))
-                    j = join('₀'+d for d in reverse(digits(bond[2].site % nsub + 1)))
+                    i = join('₀'+d for d in reverse(digits((bond[1].site - 1) % nsub + 1)))
+                    j = join('₀'+d for d in reverse(digits((bond[2].site - 1) % nsub + 1)))
                     push!(pairs, string(i, '₋', j))
                 end
                 suffix *= string('₍', join(unique!(pairs), '₊'), '₎')
@@ -620,8 +594,8 @@ function terms(coulomb::CoulombIntegral, potential=BareCoulomb(1.0); order::Int=
             if length(groups) > 1
                 pairs = String[]
                 for bond in refs
-                    i = join('₀'+d for d in reverse(digits(bond[1].site % nsub + 1)))
-                    j = join('₀'+d for d in reverse(digits(bond[2].site % nsub + 1)))
+                    i = join('₀'+d for d in reverse(digits((bond[1].site - 1) % nsub + 1)))
+                    j = join('₀'+d for d in reverse(digits((bond[2].site - 1) % nsub + 1)))
                     push!(pairs, string(i, '₋', j))
                 end
                 suffix *= string('₍', join(unique!(pairs), '₊'), '₎')
