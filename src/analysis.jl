@@ -486,12 +486,12 @@ function terms(hopping::HoppingIntegral; order::Int, ismodulatable::Bool=true, a
             length(groups) > 1 && (suffix *= string('₋', join('₀'+d for d in reverse(digits(idx)))))
             refs = Tuple(Bond(bond.kind, SVector(bond[1], bond[2])) for bond in group.bonds)
             push!(result, Hopping(
-                Symbol("t", suffix), sum(group.ts)/length(group.ts), k;
+                Symbol("t", suffix), Complex(sum(group.ts)/length(group.ts)), k;
                 amplitude=SublatticeAmplitude(refs, vectors, nsublattice),
                 ismodulatable=ismodulatable
             ))
             push!(result, Hopping(
-                Symbol("λ", suffix), sign(first(group.λs))*sum(abs, group.λs)/length(group.λs), k, 𝕔⁺𝕔(:, :, σᶻ);
+                Symbol("λ", suffix), Complex(sign(first(group.λs))*sum(abs, group.λs)/length(group.λs)), k, 𝕔⁺𝕔(:, :, σᶻ);
                 amplitude=SpinOrbitalCouplingAmplitude(Tuple(group.signs), refs, vectors, nsublattice),
                 ismodulatable=ismodulatable
             ))
@@ -505,7 +505,7 @@ function terms(hopping::HoppingIntegral; order::Int, ismodulatable::Bool=true, a
     if all(μ->isapprox(μ, first(μs); atol=atol, rtol=rtol), μs)
         refs = ntuple(i->Bond(0, SVector(Point(i, lattice[i]))), nsublattice)
         push!(onsites, Onsite(
-            :μ, sum(μs)/length(μs);
+            :μ, Complex(sum(μs)/length(μs));
             amplitude=OnsiteAmplitude(refs, vectors, nsublattice),
             ismodulatable=ismodulatable
         ))
@@ -514,7 +514,7 @@ function terms(hopping::HoppingIntegral; order::Int, ismodulatable::Bool=true, a
             name = Symbol("μ", join('₀'+d for d in reverse(digits(i))))
             refs = (Bond(0, SVector(Point(i, lattice[i]))),)
             push!(onsites, Onsite(
-                name, μ;
+                name, Complex(μ);
                 amplitude=OnsiteAmplitude(refs, vectors, nsublattice),
                 ismodulatable=ismodulatable
             ))
