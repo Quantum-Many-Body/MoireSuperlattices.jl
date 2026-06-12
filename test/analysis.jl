@@ -11,8 +11,7 @@ import Plots
     # Wannier function W
     lattice = MoireTriangular()
     hilbert = Hilbert(Fock{:f}(1, 2), length(lattice))
-    recipls = reciprocals(lattice)
-    wannier = MoireWannier(bltmd, lattice; nk=24, band=dimension(bltmd))
+    wannier = MoireWannier(bltmd, lattice; nk=24)
     @test count(wannier) == 1
     # (|W|^2) in the real space
     realzone = RealZone([[1.0, 0.0], [0.0, 1.0]], -1=>1, -1=>1)
@@ -28,6 +27,7 @@ import Plots
         [-3.1336, -1.357, -0.2558, 0.0, -0.2921, -0.2472, -0.0616, -0.0149, -0.0398, -0.0578, -0.0192, 0.0, 10.6093]
     ))
     # Energy band comparison: continuum model vs TBA
+    recipls = reciprocals(lattice)
     bands₁ = bltmd(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₁-K₂-Γ", length=100)))
     bands₂ = bltmd(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₂-K₁-Γ", length=100)))
     bands = tba(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₁-K₂-Γ", length=100)))
@@ -46,7 +46,7 @@ import Plots
 
     # CoulombIntegral
     update!(bltmd; θ=1.0, Vᶻ=0.0)
-    wannier = MoireWannier(bltmd, lattice; nk=24, band=dimension(bltmd))
+    wannier = MoireWannier(bltmd, lattice; nk=24)
     coulomb = CoulombIntegral(wannier)
     compare(ts, vs) = all(map((t, v)->isapprox(value(t), v; atol=1e-3, rtol=1e-3), ts, vs))
     @test compare(
@@ -71,9 +71,7 @@ end
     # Wannier function W — top two moire bands on honeycomb effective lattice
     lattice = MoireHoneycomb()
     hilbert = Hilbert(Fock{:f}(1, 2), length(lattice))
-    recipls = reciprocals(lattice)
-    top = dimension(bltmd)
-    wannier = MoireWannier(bltmd, lattice; nk=24, bands=top-1:top)
+    wannier = MoireWannier(bltmd, lattice; nk=24)
     @test count(wannier) == 2
     # (|W|^2) in the real space — two sublattices (XM at lattice[1], MX at lattice[2])
     realzone = RealZone([[1.0, 0.0], [0.0, 1.0]], -1=>1, -1=>1)
@@ -91,6 +89,7 @@ end
         [-1.208, -2.093, -0.407, -0.601, 0.144, 0.25, -0.048, -0.083, -0.015, 0.0, -0.007, -0.031, 44.583]
     ))
     # Energy band comparison: continuum model vs TBA
+    recipls = reciprocals(lattice)
     bands₁ = bltmd(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₁-K₂-Γ", length=100)))
     bands₂ = bltmd(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₂-K₁-Γ", length=100)))
     bands = tba(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₁-K₂-Γ", length=100)))
@@ -109,7 +108,7 @@ end
 
     # CoulombIntegral with three screening models
     update!(bltmd; θ=1.0, Vᶻ=0.0)
-    wannier = MoireWannier(bltmd, lattice; nk=24, bands=top-1:top)
+    wannier = MoireWannier(bltmd, lattice; nk=24)
     coulomb = CoulombIntegral(wannier)
     compare(ts, vs) = all(map((t, v)->isapprox(value(t), v; atol=1e-2, rtol=1e-2), ts, vs))
     @test compare(

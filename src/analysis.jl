@@ -108,7 +108,10 @@ end
 
 # === honeycomb constructor (nband=2, SU(2) + U(1) gauge fix) ===#
 """
-    MoireWannier(moiresystem::MoireSystem, lattice::MoireHoneycomb, brillouinzone::BrillouinZone; bands::UnitRange{Int}, tol::Real=atol)
+    MoireWannier(
+        moiresystem::MoireSystem, lattice::MoireHoneycomb, brillouinzone::BrillouinZone;
+        bands::UnitRange{Int}=dimension(moiresystem)-1:dimension(moiresystem), tol::Real=atol
+    )
 
 Construct Wannier functions for a 2-band subspace on a honeycomb lattice.
 
@@ -117,7 +120,10 @@ Steps:
 2. SU(2) rotation: maximize layer polarization via diagonalizing layer projectors
 3. U(1) gauge fix: ψ₁(r_XM) real positive (Wannier 1 at XM, bottom-layer), ψ₂(r_MX) real positive (Wannier 2 at MX, top-layer)
 """
-function MoireWannier(moiresystem::MoireSystem, lattice::MoireHoneycomb, brillouinzone::BrillouinZone; bands::UnitRange{Int}, tol::Real=atol)
+function MoireWannier(
+    moiresystem::MoireSystem, lattice::MoireHoneycomb, brillouinzone::BrillouinZone;
+    bands::UnitRange{Int}=dimension(moiresystem)-1:dimension(moiresystem), tol::Real=atol
+)
     dim, nband = dimension(moiresystem), length(bands)
     @assert nband == 2 "MoireWannier error: honeycomb requires exactly 2 bands, got $nband."
     @assert all(band -> 1 <= band <= dim, bands) "MoireWannier error: band indices out of range [1, $dim]."
