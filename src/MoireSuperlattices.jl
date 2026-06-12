@@ -2,15 +2,15 @@ module MoireSuperlattices
 
 using LinearAlgebra: Hermitian, dot, eigen, eigvecs, norm
 using Printf: @printf
-using QuantumLattices: annihilation, atol, creation, σᶻ
-using QuantumLattices: AbstractLattice, Bond, BrillouinZone, CategorizedGenerator, CompositeIndex, Coulomb, Coupling, Hilbert, Hopping, Hubbard, icoordinate, Index, InternalIndex, LaTeX, Neighbors, Onsite, OperatorGenerator, OperatorIndexToTuple, OperatorSum, Point, ReciprocalZone, SimpleInternal, Table, Term
-using QuantumLattices: azimuth, azimuthd, concatenate, decompose, distance, latexformat, periods, rcoordinate, rotate, scalartype, str, update, volume, 𝕔⁺𝕔
+using QuantumLattices: annihilation, atol, creation, rtol, σᶻ
+using QuantumLattices: AbstractLattice, Bond, BrillouinZone, CategorizedGenerator, CompositeIndex, Coulomb, Coupling, Hilbert, Hopping, Hubbard, icoordinate, Index, InternalIndex, LaTeX, Onsite, OperatorGenerator, OperatorIndexToTuple, OperatorSum, Point, ReciprocalZone, SimpleInternal, Table, Term
+using QuantumLattices: azimuth, azimuthd, concatenate, decompose, isparallel, latexformat, periods, rcoordinate, rotate, scalartype, update, volume, 𝕔⁺𝕔
 using StaticArrays: SMatrix, SVector
 using TightBindingApproximation: TBA, Fermionic, Quadratic, Quadraticization
 
 import QuantumLattices: Algorithm, Lattice, Parameters, bonds, contentnames, dimension, getcontent, indextype, isdefinite, latexname, matrix, reciprocals, script, shape, statistics, update!
 
-export BLTMD, C3, C₃, CommensurateBilayerHoneycomb, BareCoulomb, CoulombIntegral, HoppingIntegral, ImageCoulomb, MoireHoneycomb, MoireNeighbors, MoireReciprocalLattice, MoireSpace, MoireSpinor, MoireSuperlattice, MoireSystem, MoireTriangular, MoireTriangularReciprocal, MoireWannier, OnsiteAmplitude, PointGroup, RealZone, SpinOrbitalCouplingAmplitude, SublatticeAmplitude, TanhCoulomb, bltmd!, bltmdmap, nsublattice, terms, truncation, vectors
+export BLTMD, CommensurateBilayerHoneycomb, BareCoulomb, CoulombIntegral, HoppingIntegral, ImageCoulomb, MoireHoneycomb, MoireReciprocalLattice, MoireSpace, MoireSpinor, MoireSuperlattice, MoireSystem, MoireTriangular, MoireTriangularReciprocal, MoireWannier, OnsiteAmplitude, RealZone, SpinOrbitalCouplingAmplitude, SublatticeAmplitude, TanhCoulomb, bltmd!, bltmdmap, terms, truncation, vectors
 
 include("lattices.jl")
 include("systems.jl")

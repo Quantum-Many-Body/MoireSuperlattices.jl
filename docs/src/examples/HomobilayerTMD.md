@@ -57,11 +57,11 @@ plot!(plt, bands₂, ylim=(emin, emax), color="blue", title="")
 
 For the topologically trivial topmost Moire band, it forms a triangular lattice. The effective tight-binding model of this sole band can be obtained:
 ```@example WSe₂
-lattice = MoireTriangular(6)
+lattice = MoireTriangular()
 hilbert = Hilbert(Fock{:f}(1, 2), length(lattice))
 wannier = MoireWannier(WSe₂, lattice; nk=24)
 hopping = HoppingIntegral(wannier)
-tba = Algorithm(:tba, TBA(lattice, hilbert, terms(hopping; tol=10^-6)))
+tba = Algorithm(:tba, TBA(lattice, hilbert, terms(hopping; order=6, atol=1e-4, rtol=1e-4)))
 nothing # hide
 ```
 Here, the hopping parameters are truncated up to the 6th order. We can compare the energy bands of this tight-binding model with those of the continuum model:

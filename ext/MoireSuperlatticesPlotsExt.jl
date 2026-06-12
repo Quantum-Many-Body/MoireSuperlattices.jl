@@ -1,8 +1,8 @@
 module MoireSuperlatticesPlotsExt
 
 using RecipesBase: @recipe, @series
-using MoireSuperlattices: CommensurateBilayerHoneycomb, vectors
-using QuantumLattices: Bond, Lattice, Neighbors, distance, hexagon120°map, hexagon60°map, reciprocals, str
+using MoireSuperlattices: CommensurateBilayerHoneycomb, MoireWannier, RealZone, vectors
+using QuantumLattices: Bond, Lattice, Neighbors, distance, hexagon120°map, hexagon60°map, reciprocals, shape, str
 
 """
     plot(moire::CommensurateBilayerHoneycomb, choice::Symbol, n=2*ceil(Int, √count(moire)); topcolor=:red, bottomcolor=:blue, vector=true, vectorcolor=:green, moirecolor=:black, anglecolor=:grey)
@@ -52,6 +52,41 @@ Plot a Moire superlattice composed of two layers of honeycomb lattices in the re
         recipls = reciprocals([t₁, t₂])
         color --> moirecolor
         Lattice(Lattice([collect(mapreduce(*, +, hexagon120°map[key], recipls)) for key in ("K₁", "K₂")]...; vectors=recipls), (n, n); mode=:center), 1, bond::Bond->bond.kind==1
+    end
+end
+
+"""
+    plot(realzone::RealZone, wannier::MoireWannier, sublattice::Int; ncluster=(-2:2, -2:2), subtitles=["bottom", "top"], subtitlefontsize=10)
+
+Plot the real-space distribution of a Moire Wannier function.
+
+Evaluates `|W(r, sublattice)|` on the given `RealZone` grid, creates a multi-panel heatmap (one panel per physical layer), and overlays the cluster lattice with 1st-neighbor bonds.
+"""
+@recipe function plot(realzone::RealZone, wannier::MoireWannier, sublattice::Int; ncluster=(-2:2, -2:2), subtitles=["bottom", "top"], subtitlefontsize=10)
+    @assert 1 <= sublattice <= count(wannier) "Wannier plot error: sublattice $sublattice out of range [1, $(count(wannier))]."
+    nlayer = size(wannier.bloch, 1)
+    data = zeros(length(realzone), nlayer)
+    for (i, r) in enumerate(realzone)
+        data[i, :] = abs.(wannier(r, sublattice))
+    end
+    data = reshape(data, map(length, reverse(shape(realzone)))..., nlayer)
+    x, y = range(realzone, 1), range(realzone, 2)
+    xlims --> (first(x)-step(x), last(x)+step(x))
+    ylims --> (first(y)-step(y), last(y)+step(y))
+    clims --> extrema(data)
+    @series begin
+        plot_title --> "|W(r)|"
+        plot_titlefontsize --> 10
+        realzone, data
+    end
+    cluster = Lattice(wannier.lattice, ncluster, ('O', 'O'))
+    for i in 1:nlayer
+        @series begin
+            subplot := i
+            title := subtitles[i]
+            titlefontsize := subtitlefontsize
+            cluster, 1
+        end
     end
 end
 

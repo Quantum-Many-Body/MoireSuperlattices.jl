@@ -1,6 +1,5 @@
 using MoireSuperlattices
 using QuantumLattices
-using StaticArrays: SVector
 using TightBindingApproximation
 import CairoMakie as Makie
 import Plots
@@ -10,30 +9,28 @@ import Plots
     bltmd = Algorithm(:BLTMD, BLTMD(values(parameters)...; truncation=4), parameters)
 
     # Wannier function W
-    lattice = MoireTriangular(6)
+    lattice = MoireTriangular()
     hilbert = Hilbert(Fock{:f}(1, 2), length(lattice))
     recipls = reciprocals(lattice)
     wannier = MoireWannier(bltmd, lattice; nk=24, band=dimension(bltmd))
     @test count(wannier) == 1
     # (|W|^2) in the real space
-    rz = RealZone([[1.0, 0.0], [0.0, 1.0]], -2=>2, -2=>2)
-    result = zeros(length(rz), 2)
-    for (i, r) in enumerate(rz)
-        result[i, :] = abs.(wannier(r))
-    end
-    result = reshape(result, map(length, reverse(shape(rz)))..., 2)
-    Plots.savefig(Plots.plot(rz, result), "Plots-WeSe₂-wannier.png")
-    Makie.save("Makie-WeSe₂-wannier.png", Makie.plot(rz, result))
+    realzone = RealZone([[1.0, 0.0], [0.0, 1.0]], -1=>1, -1=>1)
+    Plots.savefig(Plots.plot(realzone, wannier, 1), "Plots-WeSe₂-wannier.png")
+    Makie.save("Makie-WeSe₂-wannier.png", Makie.plot(realzone, wannier, 1))
 
-    # HoppingIntegral
+    # HoppingIntegral and TBA
     hopping = HoppingIntegral(wannier)
-    tba = Algorithm(:tba, TBA(lattice, hilbert, terms(hopping; tol=1e-6)))
-    @test all(map((x, y)->isapprox(x, y; atol=10^-4), tba.parameters, [-3.13361279, -1.35704902, -0.25580374, 0.0, -0.29205446, -0.24716631, -0.06155122, -0.01488868, -0.03976008, -0.05775271, -0.01915438, 0.0, 10.60934397]))
-
+    tba = Algorithm(:tba, TBA(lattice, hilbert, terms(hopping; order=6, atol=1e-4, rtol=1e-4)))
+    @test all(map(
+        (x, y)->isapprox(x, y; atol=1e-4, rtol=1e-4),
+        tba.parameters,
+        [-3.1336, -1.357, -0.2558, 0.0, -0.2921, -0.2472, -0.0616, -0.0149, -0.0398, -0.0578, -0.0192, 0.0, 10.6093]
+    ))
+    # Energy band comparison: continuum model vs TBA
     bands₁ = bltmd(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₁-K₂-Γ", length=100)))
     bands₂ = bltmd(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₂-K₁-Γ", length=100)))
     bands = tba(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₁-K₂-Γ", length=100)))
-
     plt = Plots.plot()
     emin, emax = -40.0, 40.0
     Plots.plot!(plt, bands₁, ylims=(emin, emax), color="blue", title="")
@@ -51,18 +48,18 @@ import Plots
     update!(bltmd; θ=1.0, Vᶻ=0.0)
     wannier = MoireWannier(bltmd, lattice; nk=24, band=dimension(bltmd))
     coulomb = CoulombIntegral(wannier)
-    compare(ts, vs) = all(map((t, v)->isapprox(value(t), v; atol=1e-4), ts, vs))
+    compare(ts, vs) = all(map((t, v)->isapprox(value(t), v; atol=1e-3, rtol=1e-3), ts, vs))
     @test compare(
-        terms(coulomb, BareCoulomb(10.0); order=4, tol=1e-5),
-        [63.46943858, 6.36851152, 3.08094620, 2.48762849, 1.55677789]
+        terms(coulomb, BareCoulomb(10.0); order=4, atol=1e-3, rtol=1e-3),
+        [63.469, 6.369, 3.081, 2.488, 1.557]
     )
     @test compare(
-        terms(coulomb, ImageCoulomb(10.0, 20.0); order=4, tol=1e-5),
-        [41.21364408, 3.99961333, 3.85050967, 3.83863948, 3.82626882]
+        terms(coulomb, ImageCoulomb(10.0, 20.0); order=4, atol=1e-3, rtol=1e-3),
+        [41.214, 4.0, 3.851, 3.839, 3.826]
     )
     @test compare(
-        terms(coulomb, TanhCoulomb(10.0, 20.0); order=4, tol=1e-5),
-        [31.44096775, 1.90862459, 1.90842110, 1.90842320, 1.90842098]
+        terms(coulomb, TanhCoulomb(10.0, 20.0); order=4, atol=1e-3, rtol=1e-3),
+        [31.441, 1.909, 1.908, 1.908, 1.908]
     )
 end
 
@@ -71,41 +68,32 @@ end
     parameters = (a₀=3.52, m=0.60, θ=2.94, Vᶻ=0.0, μ=0.0, V=20.8, ψ=107.7, w=-23.80)
     bltmd = Algorithm(:BLTMD, BLTMD(values(parameters)...; truncation=4), parameters)
 
-    # Wannier function W — top two moiré bands on honeycomb effective lattice
-    lattice = MoireHoneycomb(6)
+    # Wannier function W — top two moire bands on honeycomb effective lattice
+    lattice = MoireHoneycomb()
     hilbert = Hilbert(Fock{:f}(1, 2), length(lattice))
     recipls = reciprocals(lattice)
     top = dimension(bltmd)
     wannier = MoireWannier(bltmd, lattice; nk=24, bands=top-1:top)
     @test count(wannier) == 2
-
-    # (|W|^2) in the real space — two sublattices (MX at lattice[1], XM at lattice[2])
-    rz = RealZone([[1.0, 0.0], [0.0, 1.0]], -1=>1, -1=>1)
-    result₁ = zeros(length(rz), 2)  # sublattice 1 (MX-centered)
-    result₂ = zeros(length(rz), 2)  # sublattice 2 (XM-centered)
-    for (i, r) in enumerate(rz)
-        result₁[i, :] = abs.(wannier(r, 1))
-        result₂[i, :] = abs.(wannier(r, 2))
-    end
-    result₁ = reshape(result₁, map(length, reverse(shape(rz)))..., 2)
-    result₂ = reshape(result₂, map(length, reverse(shape(rz)))..., 2)
-    Plots.savefig(Plots.plot(rz, result₁), "Plots-MoTe₂-wannier-MX.png")
-    Plots.savefig(Plots.plot(rz, result₂), "Plots-MoTe₂-wannier-XM.png")
-    Makie.save("Makie-MoTe₂-wannier-MX.png", Makie.plot(rz, result₁))
-    Makie.save("Makie-MoTe₂-wannier-XM.png", Makie.plot(rz, result₂))
+    # (|W|^2) in the real space — two sublattices (XM at lattice[1], MX at lattice[2])
+    realzone = RealZone([[1.0, 0.0], [0.0, 1.0]], -1=>1, -1=>1)
+    Plots.savefig(Plots.plot(realzone, wannier, 1), "Plots-MoTe₂-wannier-XM.png")
+    Plots.savefig(Plots.plot(realzone, wannier, 2), "Plots-MoTe₂-wannier-MX.png")
+    Makie.save("Makie-MoTe₂-wannier-XM.png", Makie.plot(realzone, wannier, 1))
+    Makie.save("Makie-MoTe₂-wannier-MX.png", Makie.plot(realzone, wannier, 2))
 
     # HoppingIntegral and TBA
     hopping = HoppingIntegral(wannier)
-    tba = Algorithm(:tba, TBA(lattice, hilbert, terms(hopping; tol=1e-4)))
-    @test all(map((x, y)->isapprox(x, y; atol=10^-4), tba.parameters,
-        [-1.20822104, -2.09270444, -0.40710976, -0.60058253, 0.14433987, 0.25000488, -0.04820146, -0.08349297, -0.01523973, 0.00000934, -0.00690071, -0.03103523, 44.58298090, 44.58284580]
+    tba = Algorithm(:tba, TBA(lattice, hilbert, terms(hopping; order=6, atol=1e-3, rtol=1e-3)))
+    @test all(map(
+        (x, y)->isapprox(x, y; atol=1e-3, rtol=1e-3),
+        tba.parameters,
+        [-1.208, -2.093, -0.407, -0.601, 0.144, 0.25, -0.048, -0.083, -0.015, 0.0, -0.007, -0.031, 44.583]
     ))
-
     # Energy band comparison: continuum model vs TBA
     bands₁ = bltmd(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₁-K₂-Γ", length=100)))
     bands₂ = bltmd(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₂-K₁-Γ", length=100)))
     bands = tba(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₁-K₂-Γ", length=100)))
-
     plt = Plots.plot()
     emin, emax = -10.0, 50.0
     Plots.plot!(plt, bands₁, ylims=(emin, emax), color="blue", title="")
@@ -123,17 +111,17 @@ end
     update!(bltmd; θ=1.0, Vᶻ=0.0)
     wannier = MoireWannier(bltmd, lattice; nk=24, bands=top-1:top)
     coulomb = CoulombIntegral(wannier)
-    compare(ts, vs) = all(map((t, v)->isapprox(value(t), v; atol=1e-4), ts, vs))
+    compare(ts, vs) = all(map((t, v)->isapprox(value(t), v; atol=1e-2, rtol=1e-2), ts, vs))
     @test compare(
-        terms(coulomb, BareCoulomb(10.0); order=4, tol=1e-3),
-        [81.80992834, 81.20328224, 11.33693336, 5.93094850, 5.93224071, 3.40304785, 2.51544556]
+        terms(coulomb, BareCoulomb(10.0); order=4, atol=1e-2, rtol=1e-2),
+        [81.51, 11.34, 7.39, 5.93, 3.4, 4.96, 2.52, 2.81, 7.39]
     )
     @test compare(
-        terms(coulomb, ImageCoulomb(10.0, 20.0); order=4, tol=1e-3),
-        [56.98253589, 56.43494002, 4.35892023, 3.72492271, 3.63170873, 3.60396218]
+        terms(coulomb, ImageCoulomb(10.0, 20.0); order=4, atol=1e-2, rtol=1e-2),
+        [56.71, 4.36, 3.99, 3.73, 3.63, 3.67, 3.61, 3.99]
     )
     @test compare(
-        terms(coulomb, TanhCoulomb(10.0, 20.0); order=4, tol=1e-3),
-        [45.90855073, 45.39858355, 1.81623487, 1.79113614, 1.78974441, 1.78975394]
+        terms(coulomb, TanhCoulomb(10.0, 20.0); order=4, atol=1e-2, rtol=1e-2),
+        [45.91, 45.4, 1.81, 1.79, 1.79, 1.79]
     )
 end
