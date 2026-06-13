@@ -2,7 +2,7 @@ module MoireSuperlattices
 
 using LinearAlgebra: Hermitian, dot, eigen, eigvecs, norm
 using Printf: @printf
-using QuantumLattices: annihilation, atol, creation, rtol, σᶻ
+using QuantumLattices: annihilation, atol, creation, σᶻ
 using QuantumLattices: AbstractLattice, Bond, BrillouinZone, CategorizedGenerator, CompositeIndex, Coulomb, Coupling, Hilbert, Hopping, Hubbard, icoordinate, Index, InternalIndex, LaTeX, Onsite, OperatorGenerator, OperatorIndexToTuple, OperatorSum, Point, ReciprocalZone, SimpleInternal, Table, Term
 using QuantumLattices: azimuth, azimuthd, concatenate, decompose, isparallel, latexformat, periods, rcoordinate, rotate, scalartype, update, volume, 𝕔⁺𝕔
 using StaticArrays: SMatrix, SVector

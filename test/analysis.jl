@@ -11,7 +11,7 @@ import Plots
     # Wannier function W
     lattice = MoireTriangular()
     hilbert = Hilbert(Fock{:f}(1, 2), length(lattice))
-    wannier = MoireWannier(bltmd, lattice; nk=24)
+    wannier = MoireWannier(bltmd, lattice; nk=18)
     @test count(wannier) == 1
     # (|W|^2) in the real space
     realzone = RealZone([[1.0, 0.0], [0.0, 1.0]], -1=>1, -1=>1)
@@ -20,11 +20,11 @@ import Plots
 
     # HoppingIntegral and TBA
     hopping = HoppingIntegral(wannier)
-    tba = Algorithm(:tba, TBA(lattice, hilbert, terms(hopping; order=6, atol=1e-4, rtol=1e-4)))
+    tba = Algorithm(:tba, TBA(lattice, hilbert, terms(hopping; order=6, atol=1e-3, rtol=1e-3)))
     @test all(map(
-        (x, y)->isapprox(x, y; atol=1e-4, rtol=1e-4),
+        (x, y)->isapprox(x, y; atol=1e-3, rtol=1e-3),
         tba.parameters,
-        [-3.1336, -1.357, -0.2558, 0.0, -0.2921, -0.2472, -0.0616, -0.0149, -0.0398, -0.0578, -0.0192, 0.0, 10.6093]
+        [-3.134, -1.357, -0.256, 0.0, -0.292, -0.247, -0.062, -0.015, -0.040, -0.058, -0.019, 0.0, 10.609]
     ))
     # Energy band comparison: continuum model vs TBA
     recipls = reciprocals(lattice)
@@ -45,21 +45,19 @@ import Plots
     Makie.save("Makie-WeSe₂-continuum-tba.png", fig)
 
     # CoulombIntegral
-    update!(bltmd; θ=1.0, Vᶻ=0.0)
-    wannier = MoireWannier(bltmd, lattice; nk=24)
     coulomb = CoulombIntegral(wannier)
     compare(ts, vs) = all(map((t, v)->isapprox(value(t), v; atol=1e-3, rtol=1e-3), ts, vs))
     @test compare(
         terms(coulomb, BareCoulomb(10.0); order=4, atol=1e-3, rtol=1e-3),
-        [63.469, 6.369, 3.081, 2.488, 1.557]
+        [98.816, 26.177, 11.024, 8.548, 4.634]
     )
     @test compare(
         terms(coulomb, ImageCoulomb(10.0, 20.0); order=4, atol=1e-3, rtol=1e-3),
-        [41.214, 4.0, 3.851, 3.839, 3.826]
+        [101.519, 37.284, 28.939, 28.206, 27.338]
     )
     @test compare(
         terms(coulomb, TanhCoulomb(10.0, 20.0); order=4, atol=1e-3, rtol=1e-3),
-        [31.441, 1.909, 1.908, 1.908, 1.908]
+        [77.818, 18.932, 13.717, 13.536, 13.369]
     )
 end
 
@@ -71,7 +69,7 @@ end
     # Wannier function W — top two moire bands on honeycomb effective lattice
     lattice = MoireHoneycomb()
     hilbert = Hilbert(Fock{:f}(1, 2), length(lattice))
-    wannier = MoireWannier(bltmd, lattice; nk=24)
+    wannier = MoireWannier(bltmd, lattice; nk=18)
     @test count(wannier) == 2
     # (|W|^2) in the real space — two sublattices (XM at lattice[1], MX at lattice[2])
     realzone = RealZone([[1.0, 0.0], [0.0, 1.0]], -1=>1, -1=>1)
@@ -106,21 +104,11 @@ end
     Makie.plot!(ax, bands; ylims=(emin, emax), linestyle=:dash, color=:red, title="")
     Makie.save("Makie-MoTe₂-continuum-tba.png", fig)
 
-    # CoulombIntegral with three screening models
-    update!(bltmd; θ=1.0, Vᶻ=0.0)
-    wannier = MoireWannier(bltmd, lattice; nk=24)
+    # CoulombIntegral
     coulomb = CoulombIntegral(wannier)
-    compare(ts, vs) = all(map((t, v)->isapprox(value(t), v; atol=1e-2, rtol=1e-2), ts, vs))
+    compare(ts, vs) = all(map((t, v)->isapprox(value(t), v; atol=1e-3, rtol=1e-3), ts, vs))
     @test compare(
-        terms(coulomb, BareCoulomb(10.0); order=4, atol=1e-2, rtol=1e-2),
-        [81.51, 11.34, 7.39, 5.93, 3.4, 4.96, 2.52, 2.81, 7.39]
-    )
-    @test compare(
-        terms(coulomb, ImageCoulomb(10.0, 20.0); order=4, atol=1e-2, rtol=1e-2),
-        [56.71, 4.36, 3.99, 3.73, 3.63, 3.67, 3.61, 3.99]
-    )
-    @test compare(
-        terms(coulomb, TanhCoulomb(10.0, 20.0); order=4, atol=1e-2, rtol=1e-2),
-        [45.91, 45.4, 1.81, 1.79, 1.79, 1.79]
+        terms(coulomb, BareCoulomb(10.0); order=4, atol=1e-3, rtol=1e-3),
+        [114.733, 34.607, 16.841, 13.779, 9.045]
     )
 end

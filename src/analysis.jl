@@ -59,11 +59,11 @@ Forward to the wrapped [`MoireSystem`](@ref) frontend.
 @inline MoireWannier(moiresystem::Algorithm{<:MoireSystem}, args...; kwargs...) = MoireWannier(moiresystem.frontend, args...; kwargs...)
 
 """
-    MoireWannier(moiresystem::MoireSystem, lattice::MoireSuperlattice; nk=24, kwargs...)
+    MoireWannier(moiresystem::MoireSystem, lattice::MoireSuperlattice; nk=18, kwargs...)
 
 Convenience constructor that auto-generates a `BrillouinZone` with `nk` k-points per dimension from `lattice` and delegates to the full constructor.
 """
-@inline function MoireWannier(moiresystem::MoireSystem, lattice::MoireSuperlattice; nk=24, kwargs...)
+@inline function MoireWannier(moiresystem::MoireSystem, lattice::MoireSuperlattice; nk=18, kwargs...)
     recipls = reciprocals(lattice)
     @assert recipls ≈ reciprocals(moiresystem.reciprocallattice) atol=1e-12 "MoireWannier error: mismatched reciprocals between input `moiresystem` and `lattice`."
     brillouinzone = BrillouinZone(reciprocals(lattice), nk)
@@ -358,9 +358,10 @@ function (coulomb::CoulombIntegral)(R::AbstractVector{<:Number}, potential=BareC
     nband = size(coulomb.wannier.energies, 1)
     result = zeros(Float64, nband, nband)
     for (q, m′m) in zip(coulomb.qs, coulomb.formfactor)
-        Vq = potential(norm(q), coulomb.wannier.aₘ) * cos(dot(q, R))
+        Vq = potential(norm(q), coulomb.wannier.aₘ)
+        phase = cis(dot(q, R))
         for i in eachindex(result, m′m)
-            result[i] += Vq * real(m′m[i])
+            result[i] += Vq * real(m′m[i] * phase)
         end
     end
     return broadcast!(/, result, result, nk*Ω)
@@ -428,7 +429,7 @@ function (amp::OnsiteAmplitude)(bond::Bond)
 end
 
 """
-    terms(hopping::HoppingIntegral; order::Int, ismodulatable::Bool=true, atol::Real=atol, rtol::Real=rtol) -> Tuple{Vararg{Term}}
+    terms(hopping::HoppingIntegral; order::Int, ismodulatable::Bool=true, atol::Real=1e-3, rtol::Real=1e-3) -> Tuple{Vararg{Term}}
 
 Generate spin-independent and spin-orbital-coupling `Hopping` terms and `Onsite` terms from a [`HoppingIntegral`](@ref).
 
@@ -448,7 +449,7 @@ Generate spin-independent and spin-orbital-coupling `Hopping` terms and `Onsite`
 - Multiple groups per shell: `t₁₋₁`, `t₁₋₂`, … and `λ₁₋₁`, `λ₁₋₂`, …
 - Onsite: `μ` (all equal) or `μ₁`, `μ₂`, … (per-sublattice).
 """
-function terms(hopping::HoppingIntegral; order::Int, ismodulatable::Bool=true, atol::Real=atol, rtol::Real=rtol)
+function terms(hopping::HoppingIntegral; order::Int, ismodulatable::Bool=true, atol::Real=1e-3, rtol::Real=1e-3)
     lattice = hopping.wannier.lattice
     vectors, nsublattice = lattice.vectors, length(lattice)
     # Get all translationally inequivalent bonds up to `order`
@@ -530,7 +531,7 @@ function terms(hopping::HoppingIntegral; order::Int, ismodulatable::Bool=true, a
 end
 
 """
-    terms(coulomb::CoulombIntegral, potential=BareCoulomb(1.0); order::Int, ismodulatable::Bool=true, atol::Real=atol, rtol::Real=rtol) -> Tuple{Vararg{Term}}
+    terms(coulomb::CoulombIntegral, potential=BareCoulomb(1.0); order::Int, ismodulatable::Bool=true, atol::Real=1e-3, rtol::Real=1e-3) -> Tuple{Vararg{Term}}
 
 Generate Coulomb interaction terms from a [`CoulombIntegral`](@ref).
 
@@ -550,7 +551,7 @@ Generate Coulomb interaction terms from a [`CoulombIntegral`](@ref).
 - R > 0, multiple groups per shell: `V₁₋₁`, `V₁₋₂`, …
 - R = 0 (onsite): `U` (all equal) or `U₁`, `U₂`, … (per-sublattice).
 """
-function terms(coulomb::CoulombIntegral, potential=BareCoulomb(1.0); order::Int, ismodulatable::Bool=true, atol::Real=atol, rtol::Real=rtol)
+function terms(coulomb::CoulombIntegral, potential=BareCoulomb(1.0); order::Int, ismodulatable::Bool=true, atol::Real=1e-3, rtol::Real=1e-3)
     lattice = coulomb.wannier.lattice
     vectors, nsublattice = lattice.vectors, length(lattice)
     # Get all translationally inequivalent bonds up to `order`
