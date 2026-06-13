@@ -16,9 +16,6 @@ using Plots
 using QuantumLattices
 using TightBindingApproximation
 
-a₀, m, θ, μ = 3.52, 0.6, 3.89, 0.0
-Vᶻ, V, ψ, w = 0.0, 20.8, 107.7, -23.8
-
 parameters = (a₀=3.52, m=0.6, θ=2.94, Vᶻ=0.0, μ=0.0, V=20.8, ψ=107.7, w=-23.8)
 MoTe₂ = Algorithm(:MoTe₂, BLTMD(values(parameters)...; truncation=4), parameters)
 recipls = reciprocals(MoTe₂.frontend.reciprocallattice)
@@ -55,7 +52,6 @@ The two topological bands together form an emergent honeycomb lattice ([`MoireHo
 
 ```@example honeycomb
 lattice = MoireHoneycomb()
-hilbert = Hilbert(Fock{:f}(1, 2), length(lattice))
 wannier = MoireWannier(MoTe₂, lattice; nk=18)
 
 # Real-space |W(r)|² on a 2×2 supercell
@@ -93,6 +89,7 @@ Here, ``t_k`` terms represent spin-independent hopping and ``\lambda_k`` terms r
 We construct the tight-binding model and compare with the continuum model.
 
 ```@example honeycomb
+hilbert = Hilbert(Fock{:f}(1, 2), length(lattice))
 tba = Algorithm(:tba, TBA(lattice, hilbert, tba_terms))
 bands_tba = tba(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₁-K₂-Γ", length=100)))
 
@@ -155,4 +152,4 @@ plot!(plt, θs, V₂s; marker=:circle, label="V₂")
 plot!(plt, θs, V₃s; marker=:circle, label="V₃")
 ```
 
-Due to the absence of ``V^z``, the two onsite Hubbard terms at the XM and MX sublattices host equal values. All interaction strengths increase with increasing twist angle as the moiré lattice constant grows.
+Due to the absence of ``V^z``, the two onsite Hubbard terms at the XM and MX sublattices host equal values. All interaction strengths increase with increasing twist angle as the moiré lattice constant decreases.

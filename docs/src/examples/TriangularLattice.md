@@ -40,8 +40,8 @@ bands₂_Vz0 = WSe₂(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₂-K
 
 # Tune Vᶻ to 16 meV to lift valley degeneracy
 update!(WSe₂; Vᶻ=16.0)
-bands₁_Vz8 = WSe₂(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₁-K₂-Γ", length=100)))
-bands₂_Vz8 = WSe₂(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₂-K₁-Γ", length=100)))
+bands₁_Vz16 = WSe₂(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₁-K₂-Γ", length=100)))
+bands₂_Vz16 = WSe₂(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₂-K₁-Γ", length=100)))
 
 emin, emax = -100.0, 50.0
 
@@ -50,9 +50,9 @@ plt = plot(layout=(1, 2), size=(800, 350))
 plot!(plt[1], bands₁_Vz0, ylims=(emin, emax), color="blue", title="")
 plot!(plt[1], bands₂_Vz0, ylims=(emin, emax), color="blue", title="Vᶻ = 0")
 
-# Vᶻ = 16 meV: layer splitting visible
-plot!(plt[2], bands₁_Vz8, ylims=(emin, emax), color="blue", title="")
-plot!(plt[2], bands₂_Vz8, ylims=(emin, emax), color="blue", title="Vᶻ = 16")
+# Vᶻ = 16 meV: valley splitting visible
+plot!(plt[2], bands₁_Vz16, ylims=(emin, emax), color="blue", title="")
+plot!(plt[2], bands₂_Vz16, ylims=(emin, emax), color="blue", title="Vᶻ = 16")
 ```
 
 At ``V^z = 0`` the two valleys are degenerate. A finite displacement field ``V^z`` induces a layer-dependent potential that lifts the valley degeneracy.
@@ -73,15 +73,14 @@ The Berry curvature is nearly uniform and integrates to a Chern number ``C \appr
 The topmost band is topologically trivial, thus, it forms an emergent triangular lattice ([`MoireTriangular`](@ref)). We construct the Wannier function with a U(1) gauge fix that makes the bottom-layer component at ``\mathbf{r}=0`` real and positive. We show two cases: ``V^z = 0`` and ``V^z = 16`` meV.
 
 ```@example triangular
-# Vᶻ = 0 case: reset the model
+# Vᶻ = 0 case: reset the model parameter
 update!(WSe₂; Vᶻ=0.0)
 lattice = MoireTriangular()
-hilbert = Hilbert(Fock{:f}(1, 2), length(lattice))
 wannier_Vz0 = MoireWannier(WSe₂, lattice; nk=18)
 
 # Vᶻ = 16 meV case
 update!(WSe₂; Vᶻ=16.0)
-wannier_Vz8 = MoireWannier(WSe₂, lattice; nk=18)
+wannier_Vz16 = MoireWannier(WSe₂, lattice; nk=18)
 
 # Real-space visualization
 realzone = RealZone([[1.0, 0.0], [0.0, 1.0]], -1=>1, -1=>1)
@@ -90,17 +89,17 @@ plot(realzone, wannier_Vz0, 1; plot_title="|W(r)|², Vᶻ = 0")
 ```
 
 ```@example triangular
-plot(realzone, wannier_Vz8, 1; plot_title="|W(r)|², Vᶻ = 16")
+plot(realzone, wannier_Vz16, 1; plot_title="|W(r)|², Vᶻ = 16")
 ```
 
 ``|W(r)|^2`` is equally distributed on both layers when ``V^z = 0``, and is partially layer polarized when ``V^z \ne 0``.
 
 ## Hopping Integrals and Tight-Binding Model
 
-From the ``V^z = 16`` meV Wannier function, we compute the hopping integrals and automatically generate the tight-binding terms up to 6th neighbor order with [`terms`](@ref). Terms smaller than ``10^{-4}`` meV in magnitude are discarded.
+From the ``V^z = 16`` meV Wannier function, we compute the hopping integrals and automatically generate the tight-binding terms up to 6th neighbor order with [`terms`](@ref).
 
 ```@example triangular
-hopping = HoppingIntegral(wannier_Vz8)
+hopping = HoppingIntegral(wannier_Vz16)
 tba_terms = terms(hopping; order=6, atol=1e-4, rtol=1e-4)
 nothing # hide
 ```
@@ -118,12 +117,13 @@ Here ``t_k`` denotes the spin-independent hopping at the ``k``-th neighbor shell
 We construct the tight-binding model and compare its energy bands with the continuum model.
 
 ```@example triangular
+hilbert = Hilbert(Fock{:f}(1, 2), length(lattice))
 tba = Algorithm(:tba, TBA(lattice, hilbert, tba_terms))
 bands_tba = tba(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₁-K₂-Γ", length=100)))
 
 plt = plot()
-plot!(plt, bands₁_Vz8, ylims=(emin, emax), color="blue")
-plot!(plt, bands₂_Vz8, ylims=(emin, emax), color="green")
+plot!(plt, bands₁_Vz16, ylims=(emin, emax), color="blue")
+plot!(plt, bands₂_Vz16, ylims=(emin, emax), color="green")
 plot!(plt, bands_tba, ylims=(emin, emax), ls=:dash, lw=2, color="red", title="Continuum vs TBA")
 ```
 
