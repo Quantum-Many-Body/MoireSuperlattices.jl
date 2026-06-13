@@ -1,7 +1,7 @@
 name = "MoireSuperlattices"
 uuid = "e394c99e-e854-4268-9140-34fa518dd490"
 authors = ["waltergu <waltergu1989@gmail.com> and contributors"]
-version = "0.1.6"
+version = "0.2.0"
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
