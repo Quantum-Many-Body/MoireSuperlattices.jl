@@ -5,7 +5,7 @@ import CairoMakie as Makie
 import Plots
 
 @testset "MoireWannier-triangular" begin
-    parameters = (a₀=3.30, m=0.45, θ=4.0, Vᶻ=10.0, μ=0.0, V=4.4, ψ=5.9, w=20.0)
+    parameters = (a₀=3.30, m=0.45, θ=4.0, Vᶻ=20.0, μ=0.0, V=4.4, ψ=5.9, w=20.0)
     bltmd = Algorithm(:BLTMD, BLTMD(values(parameters)...; truncation=4), parameters)
 
     # Wannier function W

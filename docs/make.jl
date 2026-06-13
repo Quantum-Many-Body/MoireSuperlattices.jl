@@ -19,7 +19,8 @@ makedocs(;
         "Examples" => [
             "examples/Introduction.md",
             "examples/Visualization.md",
-            "examples/HomobilayerTMD.md",
+            "examples/TriangularLattice.md",
+            "examples/HoneycombLattice.md",
         ],
         "Manual" => "manual.md",
     ],
