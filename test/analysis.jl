@@ -63,7 +63,7 @@ end
 
 @testset "MoireWannier-honeycomb" begin
     # Twisted MoTe₂ parameters from Zhou et al. (2026)
-    parameters = (a₀=3.52, m=0.60, θ=2.94, Vᶻ=0.0, μ=0.0, V=20.8, ψ=107.7, w=-23.80)
+    parameters = (a₀=3.52, m=0.60, θ=2.94, Vᶻ=3.0, μ=0.0, V=20.8, ψ=107.7, w=-23.80)
     bltmd = Algorithm(:BLTMD, BLTMD(values(parameters)...; truncation=4), parameters)
 
     # Wannier function W — top two moire bands on honeycomb effective lattice
@@ -84,7 +84,7 @@ end
     @test all(map(
         (x, y)->isapprox(x, y; atol=1e-3, rtol=1e-3),
         tba.parameters,
-        [-1.208, -2.093, -0.407, -0.601, 0.144, 0.25, -0.048, -0.083, -0.015, 0.0, -0.007, -0.031, 44.583]
+        [-1.208, -2.093, -0.392, -0.576, -0.423, 0.627, 0.145, 0.251, -0.049, -0.083, -0.048, -0.084, -0.013, 0.0, -0.018, 0.0, -0.007, -0.028, -0.007, 0.034, 45.902, 43.277]
     ))
     # Energy band comparison: continuum model vs TBA
     recipls = reciprocals(lattice)
@@ -92,7 +92,7 @@ end
     bands₂ = bltmd(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₂-K₁-Γ", length=100)))
     bands = tba(:EB, EnergyBands(ReciprocalPath(recipls, hexagon"Γ-K₁-K₂-Γ", length=100)))
     plt = Plots.plot()
-    emin, emax = -10.0, 50.0
+    emin, emax = -10.0, 60.0
     Plots.plot!(plt, bands₁, ylims=(emin, emax), color="blue", title="")
     Plots.plot!(plt, bands₂, ylims=(emin, emax), color="green", title="")
     Plots.plot!(plt, bands, ylims=(emin, emax), ls=:dash, color="red", size=(400, 300), title="")
@@ -109,6 +109,6 @@ end
     compare(ts, vs) = all(map((t, v)->isapprox(value(t), v; atol=1e-3, rtol=1e-3), ts, vs))
     @test compare(
         terms(coulomb, BareCoulomb(10.0); order=4, atol=1e-3, rtol=1e-3),
-        [114.733, 34.607, 16.841, 13.779, 9.045]
+        [115.725, 113.635, 34.607, 16.818, 16.867, 13.780, 9.046]
     )
 end
