@@ -65,8 +65,8 @@ Convenience constructor that auto-generates a `BrillouinZone` with `nk` k-points
 """
 @inline function MoireWannier(moiresystem::MoireSystem, lattice::MoireSuperlattice; nk=18, kwargs...)
     recipls = reciprocals(lattice)
-    @assert recipls ≈ reciprocals(moiresystem.reciprocallattice) atol=1e-12 "MoireWannier error: mismatched reciprocals between input `moiresystem` and `lattice`."
-    brillouinzone = BrillouinZone(reciprocals(lattice), nk)
+    @assert isapprox(recipls, reciprocals(moiresystem.reciprocallattice); atol=1e-12) "MoireWannier error: mismatched reciprocals between input `moiresystem` and `lattice`."
+    brillouinzone = BrillouinZone(recipls, nk)
     return MoireWannier(moiresystem, lattice, brillouinzone; kwargs...)
 end
 

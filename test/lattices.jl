@@ -33,9 +33,9 @@ end
     @test getcontent(lattice, :vectors) == []
     @test truncation(lattice) == 4
     @test reciprocals(lattice) == lattice.translations
-    @test lattice.Γ ≈ SVector(2π/√3, 0.0) atol=1e-12
-    @test lattice.K₊ ≈ SVector(0.0, 2π/3) atol=1e-12
-    @test lattice.K₋ ≈ SVector(0.0, -2π/3) atol=1e-12
+    @test isapprox(lattice.Γ, SVector(2π/√3, 0.0); atol=1e-12)
+    @test isapprox(lattice.K₊, SVector(0.0, 2π/3); atol=1e-12)
+    @test isapprox(lattice.K₋, SVector(0.0, -2π/3); atol=1e-12)
     @test lattice.translations ≈ reciprocals(MoireTriangularReciprocal)
     Plots.savefig(Plots.plot(lattice, 1), "Plots-moire-reciprocal-lattice.png")
     Makie.save("Makie-moire-reciprocal-lattice.png", Makie.plot(lattice, 1))
