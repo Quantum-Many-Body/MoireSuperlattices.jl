@@ -94,7 +94,7 @@ end
     end
     return result
 end
-@inline Base.count(moire::Algorithm{<:MoireSystem}) = count(moire.frontend)
+@delegate @inline Base.count(moire::MoireSystem) = (getcontent(moire, :system).hilbert)[1].nlayer * (getcontent(moire, :system).hilbert)[1].nsublattice
 
 """
     BLTMD{
@@ -121,7 +121,6 @@ mutable struct BLTMD{
     const quadraticization::Q
     const H::H
 end
-@inline Base.count(bltmd::BLTMD) = (bltmd.system.hilbert)[1].nlayer * (bltmd.system.hilbert)[1].nsublattice
 
 """
     BLTMD(a₀::Number, m::Number, θ::Number, Vᶻ::Number, μ::Number, V::Number, ψ::Number, w::Number; truncation::Int=4)
@@ -185,7 +184,7 @@ end
 """
     Algorithm(name::Symbol, bltmd::BLTMD, parameters::Parameters; kwargs...)
 
-Construct an `Algorithm` with a `BLTMD` as the frontend.
+Construct an `Algorithm` with a `BLTMD` as the model.
 """
 @inline function Algorithm(name::Symbol, bltmd::BLTMD, parameters::Parameters; kwargs...)
     return Algorithm(name, bltmd, parameters, bltmdmap; kwargs...)

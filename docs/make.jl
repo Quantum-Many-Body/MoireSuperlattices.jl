@@ -12,7 +12,7 @@ makedocs(;
         prettyurls=get(ENV, "CI", "false") == "true",
         canonical="https://Quantum-Many-Body.github.io/MoireSuperlattices.jl",
         edit_link="main",
-        assets=["assets/favicon.ico"],
+        assets=["assets/favicon.ico", "assets/custom.css"],
     ),
     pages=[
         "Home" => "index.md",
