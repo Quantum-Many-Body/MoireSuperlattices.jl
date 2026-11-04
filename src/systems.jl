@@ -189,3 +189,125 @@ Construct an `Algorithm` with a `BLTMD` as the model.
 @inline function Algorithm(name::Symbol, bltmd::BLTMD, parameters::Parameters; kwargs...)
     return Algorithm(name, bltmd, parameters, bltmdmap; kwargs...)
 end
+
+"""
+    TLTMD{
+        L<:MoireReciprocalLattice,
+        D<:Function,
+        S<:OperatorGenerator,
+        Q<:Quadraticization,
+        H<:CategorizedGenerator{<:OperatorSum{<:Quadratic}}
+    } <: MoireSystem{NamedTuple{(:a₀, :m, :θ, :Vᶻ, :μ, :ϕ), NTuple{6, Float64}}, L, D, S, Q, H}
+
+Helically twisted transition metal dichalcogenide homotrilayers in local moiré-periodic domains.
+"""
+mutable struct TLTMD{
+    L<:MoireReciprocalLattice,
+    D<:Function,
+    S<:OperatorGenerator,
+    Q<:Quadraticization,
+    H<:CategorizedGenerator{<:OperatorSum{<:Quadratic}}
+} <: MoireSystem{NamedTuple{(:a₀, :m, :θ, :Vᶻ, :μ, :ϕ), NTuple{6, Float64}}, L, D, S, Q, H}
+    parameters::NamedTuple{(:a₀, :m, :θ, :Vᶻ, :μ, :ϕ), NTuple{6, Float64}}
+    const reciprocallattice::L
+    const diagonal!::D
+    const system::S
+    const quadraticization::Q
+    const H::H
+end
+
+"""
+    TLTMD(a₀::Number, m::Number, θ::Number, Vᶻ::Number, μ::Number, V::Number, ψ::Number, w::Number; stacking::Symbol=:αβ, truncation::Int=4)
+
+[Continuum model of helically twisted transition metal dichalcogenide homotrilayers](https://arxiv.org/abs/2606.10422).
+
+Here, the parameters are as follows:
+* `a₀`: monolayer lattice constant (Å)
+* `m`: effective mass of the valence band (mₑ)
+* `θ`: twist angle between adjacent layers (°)
+* `Vᶻ`: perpendicular displacement field (meV)
+* `μ`: chemical potential (meV)
+* `V`: amplitude of Moire potential (meV)
+* `ψ`: phase of Moire potential (°)
+* `w`: interlayer hopping amplitude (meV)
+* `stacking`: local stacking domain, `:αβ`, `:βα` or `:αα`, corresponding to `ϕ = 120°`, `-120°` or `0°`
+"""
+function TLTMD(a₀::Number, m::Number, θ::Number, Vᶻ::Number, μ::Number, V::Number, ψ::Number, w::Number; stacking::Symbol=:αβ, truncation::Int=4)
+    @assert stacking∈(:αβ, :βα, :αα) "TLTMD error: unsupported stacking ($stacking)."
+    ϕ = stacking==:αβ ? 120.0 : stacking==:βα ? -120.0 : 0.0
+    nambus = (creation, annihilation)
+    coupling₁₁ = Coupling{MoireSpinor}(:, :, (1, 1), :, :, nambus)
+    coupling₂₂ = Coupling{MoireSpinor}(:, :, (2, 2), :, :, nambus)
+    coupling₃₃ = Coupling{MoireSpinor}(:, :, (3, 3), :, :, nambus)
+    coupling₁₂ = Coupling{MoireSpinor}(:, :, (1, 2), :, :, nambus)
+    coupling₂₃ = Coupling{MoireSpinor}(:, :, (2, 3), :, :, nambus)
+    coupling₀ = Coupling{MoireSpinor}(0, :, :, (0, 0), :, :, nambus)
+    terms = (
+        Term{:TMD}(:potential21minusᵣ, V*cosd(ψ+ϕ), 1, coupling₁₁, false),
+        Term{:TMD}(:potential21minusᵢ, V*sind(ψ+ϕ), 1, bond::Bond->(sign=round(Int, real(exp(3im*azimuth(rcoordinate(bond)))))::Int; 1im*sign*coupling₁₁), false),
+        Term{:TMD}(:potential21plusᵣ, V*cosd(ψ-ϕ), 1, coupling₂₂, false),
+        Term{:TMD}(:potential21plusᵢ, V*sind(ψ-ϕ), 1, bond::Bond->(sign=round(Int, real(exp(3im*azimuth(rcoordinate(bond)))))::Int; -1im*sign*coupling₂₂), false),
+        Term{:TMD}(:potential32minusᵣ, V*cosd(ψ-ϕ), 1, coupling₂₂, false),
+        Term{:TMD}(:potential32minusᵢ, V*sind(ψ-ϕ), 1, bond::Bond->(sign=round(Int, real(exp(3im*azimuth(rcoordinate(bond)))))::Int; 1im*sign*coupling₂₂), false),
+        Term{:TMD}(:potential32plusᵣ, V*cosd(ψ+ϕ), 1, coupling₃₃, false),
+        Term{:TMD}(:potential32plusᵢ, V*sind(ψ+ϕ), 1, bond::Bond->(sign=round(Int, real(exp(3im*azimuth(rcoordinate(bond)))))::Int; -1im*sign*coupling₃₃), false),
+        Term{:TMD}(:interlayer21₀, w, 0, coupling₁₂, false),
+        Term{:TMD}(:interlayer21ᵣ, w*cosd(ϕ), 1, bond::Bond->(α=azimuthd(rcoordinate(bond)); α≈240 || α≈300 ? coupling₁₂ : coupling₀), false),
+        Term{:TMD}(:interlayer21ᵢ, w*sind(ϕ), 1, bond::Bond->(α=azimuthd(rcoordinate(bond)); α≈240 ? 1im*coupling₁₂ : α≈300 ? -1im*coupling₁₂ : 0im*coupling₀), false),
+        Term{:TMD}(:interlayer32₀, w, 0, coupling₂₃, false),
+        Term{:TMD}(:interlayer32ᵣ, w*cosd(ϕ), 1, bond::Bond->(α=azimuthd(rcoordinate(bond)); α≈240 || α≈300 ? coupling₂₃ : coupling₀), false),
+        Term{:TMD}(:interlayer32ᵢ, w*sind(ϕ), 1, bond::Bond->(α=azimuthd(rcoordinate(bond)); α≈240 ? -1im*coupling₂₃ : α≈300 ? 1im*coupling₂₃ : 0im*coupling₀), false),
+    )
+    reciprocallattice = MoireTriangularReciprocal(truncation)
+    hilbert = Hilbert(site=>MoireSpace(1, 3, 1, 1) for site=1:length(reciprocallattice))
+    system = OperatorGenerator(bonds(reciprocallattice, 1), hilbert, terms; half=false)
+    table = Table(hilbert, OperatorIndexToTuple(:site, :layer))
+    quadraticization = Quadraticization{Fermionic{:TBA}}(table)
+    parameters = (a₀=a₀, m=m, θ=θ, Vᶻ=Vᶻ, μ=μ, ϕ=ϕ)
+    return TLTMD(parameters, reciprocallattice, tltmd!, system, quadraticization, quadraticization(system))
+end
+@inline function tltmd!(dest, a₀, m, θ, Vᶻ, μ, ϕ, k, K₊, K₋; offset)
+    m₀ = 0.0001312169949060677
+    m = m₀*m*a₀^2/(2sind(θ/2))^2
+    Γ = reciprocals(MoireTriangularReciprocal)[1]/2
+    q = k - Γ
+    dest[offset+1, offset+1] = - mapreduce(x->x^2, +, q-2K₊)/2m + Vᶻ/2 - μ
+    dest[offset+2, offset+2] = - mapreduce(x->x^2, +, q)/2m - μ
+    dest[offset+3, offset+3] = - mapreduce(x->x^2, +, q-2K₋)/2m - Vᶻ/2 - μ
+    return dest
+end
+@inline function tltmdmap(parameters)
+    V, ψ, w, ϕ = parameters[:V], parameters[:ψ], parameters[:w], parameters[:ϕ]
+    return (
+        a₀=parameters[:a₀],
+        m=parameters[:m],
+        θ=parameters[:θ],
+        Vᶻ=parameters[:Vᶻ],
+        μ=parameters[:μ],
+        ϕ=ϕ,
+        potential21minusᵣ=V*cosd(ψ+ϕ),
+        potential21minusᵢ=Complex(V*sind(ψ+ϕ)),
+        potential21plusᵣ=V*cosd(ψ-ϕ),
+        potential21plusᵢ=Complex(V*sind(ψ-ϕ)),
+        potential32minusᵣ=V*cosd(ψ-ϕ),
+        potential32minusᵢ=Complex(V*sind(ψ-ϕ)),
+        potential32plusᵣ=V*cosd(ψ+ϕ),
+        potential32plusᵢ=Complex(V*sind(ψ+ϕ)),
+        interlayer21₀=w,
+        interlayer21ᵣ=w*cosd(ϕ),
+        interlayer21ᵢ=Complex(w*sind(ϕ)),
+        interlayer32₀=w,
+        interlayer32ᵣ=w*cosd(ϕ),
+        interlayer32ᵢ=Complex(w*sind(ϕ)),
+    )
+end
+
+"""
+    Algorithm(name::Symbol, tltmd::TLTMD, parameters::Parameters; kwargs...)
+
+Construct an `Algorithm` with a `TLTMD` as the model. The domain phase `ϕ` is added from the frontend when omitted.
+"""
+@inline function Algorithm(name::Symbol, tltmd::TLTMD, parameters::Parameters; kwargs...)
+    parameters = haskey(parameters, :ϕ) ? parameters : (; parameters..., ϕ=tltmd.parameters.ϕ)
+    return Algorithm(name, tltmd, parameters, tltmdmap; kwargs...)
+end
